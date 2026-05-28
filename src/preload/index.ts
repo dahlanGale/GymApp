@@ -70,6 +70,13 @@ export interface MembershipSale {
   paymentMethod: 'cash' | 'card'
 }
 
+export interface Attendance {
+  id: string
+  memberId: string
+  memberName: string
+  timestamp: string
+}
+
 export interface BusinessConfig {
   gymName: string
   address: string
@@ -85,6 +92,7 @@ export interface AppData {
   sales: Sale[]
   entries: Entry[]
   membershipSales: MembershipSale[]
+  attendances: Attendance[]
   config: BusinessConfig
 }
 
@@ -115,7 +123,13 @@ const api = {
   importData: (data: Partial<AppData>): Promise<AppData> => 
     ipcRenderer.invoke('import-data', data),
   importCsv: (csvData: { type: 'members' | 'products' | 'memberships', data: string }): Promise<AppData> =>
-    ipcRenderer.invoke('import-csv', csvData)
+    ipcRenderer.invoke('import-csv', csvData),
+  searchMemberByCode: (code: string): Promise<Member | null> =>
+    ipcRenderer.invoke('search-member-by-code', code),
+  recordAttendance: (memberId: string): Promise<{ attendance: Attendance, member: Member }> =>
+    ipcRenderer.invoke('record-attendance', memberId),
+  openCheckInWindow: (): Promise<void> =>
+    ipcRenderer.invoke('open-checkin-window')
 }
 
 contextBridge.exposeInMainWorld('api', api)
