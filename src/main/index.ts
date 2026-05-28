@@ -77,6 +77,13 @@ interface MembershipSale {
   paymentMethod: 'cash' | 'card'
 }
 
+interface Attendance {
+  id: string
+  memberId: string
+  memberName: string
+  timestamp: string
+}
+
 interface BusinessConfig {
   gymName: string
   address: string
@@ -92,6 +99,7 @@ interface AppData {
   sales: Sale[]
   entries: Entry[]
   membershipSales: MembershipSale[]
+  attendances: Attendance[]
   config: BusinessConfig
 }
 
@@ -110,6 +118,7 @@ const defaultData: AppData = {
   sales: [],
   entries: [],
   membershipSales: [],
+  attendances: [],
   config: {
     gymName: 'Mi Gym',
     address: '',
@@ -159,6 +168,7 @@ function generateId(): string {
 }
 
 let mainWindow: BrowserWindow | null = null
+let checkInWindow: BrowserWindow | null = null
 
 function createWindow(): void {
   mainWindow = new BrowserWindow({
@@ -199,6 +209,11 @@ function createWindow(): void {
     {
       label: 'Ventana',
       submenu: [
+        { 
+          label: 'Abrir Check-In',
+          click: () => createCheckInWindow()
+        },
+        { type: 'separator' },
         { role: 'minimize' },
         { role: 'close' }
       ]
@@ -219,6 +234,49 @@ function createWindow(): void {
     mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
   } else {
     mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
+  }
+}
+
+function createCheckInWindow(): void {
+  if (checkInWindow) {
+    checkInWindow.focus()
+    return
+  }
+
+  checkInWindow = new BrowserWindow({
+    width: 600,
+    height: 500,
+    minWidth: 500,
+    minHeight: 400,
+    show: false,
+    autoHideMenuBar: true,
+    title: 'Check-In',
+    webPreferences: {
+      preload: join(__dirname, '../preload/index.js'),
+      sandbox: false,
+      contextIsolation: true,
+      nodeIntegration: false
+    }
+  })
+
+  checkInWindow.on('ready-to-show', () => {
+    checkInWindow?.show()
+    log.info('Check-in window shown')
+  })
+
+  checkInWindow.on('closed', () => {
+    checkInWindow = null
+    log.info('Check-in window closed')
+  })
+
+  checkInWindow.webContents.setWindowOpenHandler(() => {
+    return { action: 'deny' }
+  })
+
+  if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
+    checkInWindow.loadURL(process.env['ELECTRON_RENDERER_URL'] + '/checkin.html')
+  } else {
+    checkInWindow.loadFile(join(__dirname, '../renderer/checkin.html'))
   }
 }
 
@@ -441,6 +499,33 @@ app.whenReady().then(() => {
 
     saveData()
     return data
+  })
+
+  ipcMain.handle('search-member-by-code', (_event, code: string) => {
+    const member = data.members.find(m => m.id === code || m.phone === code || m.email === code)
+    return member || null
+  })
+
+  ipcMain.handle('record-attendance', (_event, memberId: string) => {
+    const member = data.members.find(m => m.id === memberId)
+    if (!member) {
+      throw new Error('Member not found')
+    }
+
+    const attendance: Attendance = {
+      id: generateId(),
+      memberId: member.id,
+      memberName: member.name,
+      timestamp: new Date().toISOString()
+    }
+
+    data.attendances.push(attendance)
+    saveData()
+    return { attendance, member }
+  })
+
+  ipcMain.handle('open-checkin-window', () => {
+    createCheckInWindow()
   })
 
   app.on('browser-window-created', (_, window) => {

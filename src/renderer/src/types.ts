@@ -68,6 +68,13 @@ export interface MembershipSale {
   paymentMethod: 'cash' | 'card'
 }
 
+export interface Attendance {
+  id: string
+  memberId: string
+  memberName: string
+  timestamp: string
+}
+
 export interface BusinessConfig {
   gymName: string
   address: string
@@ -83,6 +90,7 @@ export interface AppData {
   sales: Sale[]
   entries: Entry[]
   membershipSales: MembershipSale[]
+  attendances: Attendance[]
   config: BusinessConfig
 }
 
