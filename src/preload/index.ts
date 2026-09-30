@@ -123,13 +123,7 @@ const api = {
   importData: (data: Partial<AppData>): Promise<AppData> => 
     ipcRenderer.invoke('import-data', data),
   importCsv: (csvData: { type: 'members' | 'products' | 'memberships', data: string }): Promise<AppData> =>
-    ipcRenderer.invoke('import-csv', csvData),
-  searchMemberByCode: (code: string): Promise<Member | null> =>
-    ipcRenderer.invoke('search-member-by-code', code),
-  recordAttendance: (memberId: string): Promise<{ attendance: Attendance, member: Member }> =>
-    ipcRenderer.invoke('record-attendance', memberId),
-  openCheckInWindow: (): Promise<void> =>
-    ipcRenderer.invoke('open-checkin-window')
+    ipcRenderer.invoke('import-csv', csvData)
 }
 
 contextBridge.exposeInMainWorld('api', api)

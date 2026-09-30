@@ -22,9 +22,6 @@ declare global {
       updateConfig: (config: import('./types').BusinessConfig) => Promise<void>
       importData: (data: Partial<AppData>) => Promise<AppData>
       importCsv: (csvData: { type: 'members' | 'products' | 'memberships', data: string }) => Promise<AppData>
-      searchMemberByCode: (code: string) => Promise<import('./types').Member | null>
-      recordAttendance: (memberId: string) => Promise<{ attendance: import('./types').Attendance, member: import('./types').Member }>
-      openCheckInWindow: () => Promise<void>
     }
   }
 }
@@ -50,8 +47,8 @@ function App() {
   }
 
   const updateData = (newData: AppData) => {
+    // Los cambios ya se persistieron en el proceso main; solo se sincroniza el estado local
     setData(newData)
-    window.api.saveData(newData)
   }
 
   if (loading) {

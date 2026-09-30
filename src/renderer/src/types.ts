@@ -95,3 +95,8 @@ export interface AppData {
 }
 
 export type Page = 'dashboard' | 'members' | 'sales' | 'products' | 'memberships' | 'entries' | 'membership-sales' | 'config'
+
+export type CheckInResult =
+  | { status: 'not_found' }
+  | { status: 'ambiguous' }
+  | { status: 'success' | 'duplicate' | 'expired' | 'frozen'; memberName: string }

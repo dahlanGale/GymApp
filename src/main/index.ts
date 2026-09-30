@@ -84,6 +84,13 @@ interface Attendance {
   timestamp: string
 }
 
+type CheckInResult =
+  | { status: 'not_found' }
+  | { status: 'ambiguous' }
+  | { status: 'success' | 'duplicate' | 'expired' | 'frozen'; memberName: string }
+
+const DUPLICATE_CHECK_IN_WINDOW_MS = 2 * 60 * 1000
+
 interface BusinessConfig {
   gymName: string
   address: string
@@ -163,6 +170,35 @@ function saveData(): void {
   }
 }
 
+function getLocalDateString(date: Date): string {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+function isMembershipExpired(member: Member): boolean {
+  if (member.status === 'expired') return true
+  const endDate = member.endDate?.slice(0, 10)
+  if (!endDate || !/^\d{4}-\d{2}-\d{2}$/.test(endDate)) return true
+  return endDate < getLocalDateString(new Date())
+}
+
+function findMemberByCode(code: string): Member | null | 'ambiguous' {
+  const normalized = code.trim()
+  if (!normalized) return null
+
+  const byId = data.members.find(m => m.id === normalized)
+  if (byId) return byId
+
+  const lowerCode = normalized.toLowerCase()
+  const matches = data.members.filter(
+    m => m.phone === normalized || (m.email !== '' && m.email.toLowerCase() === lowerCode)
+  )
+  if (matches.length > 1) return 'ambiguous'
+  return matches[0] ?? null
+}
+
 function generateId(): string {
   return Date.now().toString(36) + Math.random().toString(36).substr(2)
 }
@@ -239,6 +275,8 @@ function createWindow(): void {
 
 function createCheckInWindow(): void {
   if (checkInWindow) {
+    if (checkInWindow.isMinimized()) checkInWindow.restore()
+    checkInWindow.show()
     checkInWindow.focus()
     return
   }
@@ -252,10 +290,11 @@ function createCheckInWindow(): void {
     autoHideMenuBar: true,
     title: 'Check-In',
     webPreferences: {
-      preload: join(__dirname, '../preload/index.js'),
-      sandbox: false,
+      preload: join(__dirname, '../preload/checkin.js'),
+      sandbox: true,
       contextIsolation: true,
-      nodeIntegration: false
+      nodeIntegration: false,
+      devTools: is.dev
     }
   })
 
@@ -288,7 +327,8 @@ app.whenReady().then(() => {
   ipcMain.handle('get-data', () => data)
 
   ipcMain.handle('save-data', (_event, newData: AppData) => {
-    data = newData
+    // Las asistencias solo se escriben desde el proceso main (check-in), nunca desde una copia del renderer
+    data = { ...newData, attendances: data.attendances }
     saveData()
   })
 
@@ -441,6 +481,13 @@ app.whenReady().then(() => {
     if (importedData.membershipSales) {
       data.membershipSales = [...data.membershipSales, ...importedData.membershipSales]
     }
+    if (importedData.attendances) {
+      const existingIds = new Set(data.attendances.map(a => a.id))
+      data.attendances = [
+        ...data.attendances,
+        ...importedData.attendances.filter(a => !existingIds.has(a.id))
+      ]
+    }
     saveData()
     return data
   })
@@ -501,31 +548,30 @@ app.whenReady().then(() => {
     return data
   })
 
-  ipcMain.handle('search-member-by-code', (_event, code: string) => {
-    const member = data.members.find(m => m.id === code || m.phone === code || m.email === code)
-    return member || null
-  })
+  ipcMain.handle('check-in', (_event, code: string): CheckInResult => {
+    const member = findMemberByCode(code)
+    if (member === 'ambiguous') return { status: 'ambiguous' }
+    if (!member) return { status: 'not_found' }
 
-  ipcMain.handle('record-attendance', (_event, memberId: string) => {
-    const member = data.members.find(m => m.id === memberId)
-    if (!member) {
-      throw new Error('Member not found')
-    }
+    if (member.status === 'frozen') return { status: 'frozen', memberName: member.name }
+    if (isMembershipExpired(member)) return { status: 'expired', memberName: member.name }
+
+    const now = Date.now()
+    const hasRecentCheckIn = data.attendances.some(
+      a => a.memberId === member.id && now - new Date(a.timestamp).getTime() < DUPLICATE_CHECK_IN_WINDOW_MS
+    )
+    if (hasRecentCheckIn) return { status: 'duplicate', memberName: member.name }
 
     const attendance: Attendance = {
       id: generateId(),
       memberId: member.id,
       memberName: member.name,
-      timestamp: new Date().toISOString()
+      timestamp: new Date(now).toISOString()
     }
 
     data.attendances.push(attendance)
     saveData()
-    return { attendance, member }
-  })
-
-  ipcMain.handle('open-checkin-window', () => {
-    createCheckInWindow()
+    return { status: 'success', memberName: member.name }
   })
 
   app.on('browser-window-created', (_, window) => {
