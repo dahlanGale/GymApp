@@ -3,105 +3,23 @@ import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import log from 'electron-log/main'
 import * as fs from 'fs'
+import type {
+  Member,
+  Membership,
+  Product,
+  Sale,
+  Entry,
+  MembershipSale,
+  Attendance,
+  CheckInResult,
+  BusinessConfig,
+  AppData
+} from '../shared/types'
 
 log.initialize()
 log.info('Application starting...')
 
-interface Member {
-  id: string
-  name: string
-  phone: string
-  email: string
-  membershipId: string
-  startDate: string
-  endDate: string
-  status: 'active' | 'expired' | 'frozen'
-  createdAt: string
-}
-
-interface Membership {
-  id: string
-  name: string
-  price: number
-  durationDays: number
-  hasPromotion: boolean
-  promotionType: 'new_client' | 'couple' | 'no_maintenance' | null
-  promotionDiscount: number
-  includesAnnualMaintenance: boolean
-}
-
-interface Product {
-  id: string
-  name: string
-  category: string
-  price: number
-  stock: number
-}
-
-interface SaleItem {
-  productId: string
-  productName: string
-  quantity: number
-  price: number
-}
-
-interface Sale {
-  id: string
-  memberId: string | null
-  memberName: string | null
-  items: SaleItem[]
-  total: number
-  paymentMethod: 'cash' | 'card'
-  date: string
-}
-
-interface Entry {
-  id: string
-  productId: string
-  productName: string
-  quantity: number
-  unitCost: number
-  supplier: string
-  date: string
-}
-
-interface MembershipSale {
-  id: string
-  membershipId: string
-  membershipName: string
-  memberIds: string[]
-  memberNames: string[]
-  purchaseDate: string
-  expirationDate: string
-  price: number
-  paymentMethod: 'cash' | 'card'
-}
-
-interface Attendance {
-  id: string
-  memberId: string
-  memberName: string
-  timestamp: string
-}
-
-interface BusinessConfig {
-  gymName: string
-  address: string
-  phone: string
-  email: string
-  annualMaintenanceCost: number
-}
-
-interface AppData {
-  members: Member[]
-  memberships: Membership[]
-  products: Product[]
-  sales: Sale[]
-  entries: Entry[]
-  membershipSales: MembershipSale[]
-  attendances: Attendance[]
-  config: BusinessConfig
-}
+const DUPLICATE_CHECK_IN_WINDOW_MS = 2 * 60 * 1000
 
 const defaultData: AppData = {
   members: [],
@@ -161,6 +79,35 @@ function saveData(): void {
   } catch (error) {
     log.error('Error saving data:', error)
   }
+}
+
+function getLocalDateString(date: Date): string {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+function isMembershipExpired(member: Member): boolean {
+  if (member.status === 'expired') return true
+  const endDate = member.endDate?.slice(0, 10)
+  if (!endDate || !/^\d{4}-\d{2}-\d{2}$/.test(endDate)) return true
+  return endDate < getLocalDateString(new Date())
+}
+
+function findMemberByCode(code: string): Member | null | 'ambiguous' {
+  const normalized = code.trim()
+  if (!normalized) return null
+
+  const byId = data.members.find(m => m.id === normalized)
+  if (byId) return byId
+
+  const lowerCode = normalized.toLowerCase()
+  const matches = data.members.filter(
+    m => m.phone === normalized || (m.email !== '' && m.email.toLowerCase() === lowerCode)
+  )
+  if (matches.length > 1) return 'ambiguous'
+  return matches[0] ?? null
 }
 
 function generateId(): string {
@@ -239,6 +186,8 @@ function createWindow(): void {
 
 function createCheckInWindow(): void {
   if (checkInWindow) {
+    if (checkInWindow.isMinimized()) checkInWindow.restore()
+    checkInWindow.show()
     checkInWindow.focus()
     return
   }
@@ -252,10 +201,11 @@ function createCheckInWindow(): void {
     autoHideMenuBar: true,
     title: 'Check-In',
     webPreferences: {
-      preload: join(__dirname, '../preload/index.js'),
-      sandbox: false,
+      preload: join(__dirname, '../preload/checkin.js'),
+      sandbox: true,
       contextIsolation: true,
-      nodeIntegration: false
+      nodeIntegration: false,
+      devTools: is.dev
     }
   })
 
@@ -286,11 +236,6 @@ app.whenReady().then(() => {
   loadData()
 
   ipcMain.handle('get-data', () => data)
-
-  ipcMain.handle('save-data', (_event, newData: AppData) => {
-    data = newData
-    saveData()
-  })
 
   ipcMain.handle('add-member', (_event, member: Omit<Member, 'id' | 'createdAt'>) => {
     const newMember: Member = {
@@ -441,6 +386,13 @@ app.whenReady().then(() => {
     if (importedData.membershipSales) {
       data.membershipSales = [...data.membershipSales, ...importedData.membershipSales]
     }
+    if (importedData.attendances) {
+      const existingIds = new Set(data.attendances.map(a => a.id))
+      data.attendances = [
+        ...data.attendances,
+        ...importedData.attendances.filter(a => !existingIds.has(a.id))
+      ]
+    }
     saveData()
     return data
   })
@@ -467,7 +419,7 @@ app.whenReady().then(() => {
           phone: record.phone || '',
           email: record.email || '',
           membershipId: record.membershipid || '',
-          startDate: record.startdate || new Date().toISOString().split('T')[0],
+          startDate: record.startdate || getLocalDateString(new Date()),
           endDate: record.enddate || '',
           status: (record.status as 'active' | 'expired' | 'frozen') || 'active',
           createdAt: new Date().toISOString()
@@ -501,31 +453,33 @@ app.whenReady().then(() => {
     return data
   })
 
-  ipcMain.handle('search-member-by-code', (_event, code: string) => {
-    const member = data.members.find(m => m.id === code || m.phone === code || m.email === code)
-    return member || null
-  })
+  ipcMain.handle('check-in', (_event, code: string): CheckInResult => {
+    const member = findMemberByCode(code)
+    if (member === 'ambiguous') return { status: 'ambiguous' }
+    if (!member) return { status: 'not_found' }
 
-  ipcMain.handle('record-attendance', (_event, memberId: string) => {
-    const member = data.members.find(m => m.id === memberId)
-    if (!member) {
-      throw new Error('Member not found')
-    }
+    if (member.status === 'frozen') return { status: 'frozen', memberName: member.name }
+    if (isMembershipExpired(member)) return { status: 'expired', memberName: member.name }
+
+    const now = Date.now()
+    const hasRecentCheckIn = data.attendances.some(
+      a => a.memberId === member.id && now - new Date(a.timestamp).getTime() < DUPLICATE_CHECK_IN_WINDOW_MS
+    )
+    if (hasRecentCheckIn) return { status: 'duplicate', memberName: member.name }
 
     const attendance: Attendance = {
       id: generateId(),
       memberId: member.id,
       memberName: member.name,
-      timestamp: new Date().toISOString()
+      timestamp: new Date(now).toISOString()
     }
 
     data.attendances.push(attendance)
     saveData()
-    return { attendance, member }
-  })
-
-  ipcMain.handle('open-checkin-window', () => {
-    createCheckInWindow()
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('attendance-recorded')
+    }
+    return { status: 'success', memberName: member.name }
   })
 
   app.on('browser-window-created', (_, window) => {

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Member } from '../types'
+import { CheckInResult } from '../types'
 
 type FeedbackType = 'success' | 'error' | 'warning' | null
 
@@ -7,87 +7,88 @@ interface CheckInProps {
   standalone?: boolean
 }
 
+const FEEDBACK_DURATION_MS = 2000
+
+function getFeedbackFromResult(result: CheckInResult): { type: Exclude<FeedbackType, null>; message: string } {
+  switch (result.status) {
+    case 'success':
+      return { type: 'success', message: `¡Bienvenido ${result.memberName}!` }
+    case 'duplicate':
+      return { type: 'warning', message: `${result.memberName} - Entrada ya registrada` }
+    case 'expired':
+      return { type: 'warning', message: `${result.memberName} - Membresía Expirada` }
+    case 'frozen':
+      return { type: 'warning', message: `${result.memberName} - Membresía Congelada` }
+    case 'ambiguous':
+      return { type: 'error', message: 'Código compartido por varios miembros, usa tu código de miembro' }
+    case 'not_found':
+      return { type: 'error', message: 'Miembro no encontrado' }
+  }
+}
+
 export function CheckIn({ standalone = false }: CheckInProps) {
   const [code, setCode] = useState('')
   const [feedback, setFeedback] = useState<FeedbackType>(null)
   const [message, setMessage] = useState('')
-  const [loading, setLoading] = useState(false)
+  const [pendingCount, setPendingCount] = useState(0)
   const inputRef = useRef<HTMLInputElement>(null)
+  const feedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const latestRequestRef = useRef(0)
 
   useEffect(() => {
     inputRef.current?.focus()
+    return () => {
+      if (feedbackTimerRef.current) clearTimeout(feedbackTimerRef.current)
+    }
   }, [])
 
-  const clearFeedback = () => {
-    setTimeout(() => {
+  const showFeedback = (type: Exclude<FeedbackType, null>, text: string) => {
+    if (feedbackTimerRef.current) clearTimeout(feedbackTimerRef.current)
+    setFeedback(type)
+    setMessage(text)
+    feedbackTimerRef.current = setTimeout(() => {
       setFeedback(null)
       setMessage('')
-      setCode('')
-      inputRef.current?.focus()
-    }, 2000)
+      feedbackTimerRef.current = null
+    }, FEEDBACK_DURATION_MS)
   }
 
-  const handleCheckIn = async () => {
-    if (!code.trim()) {
-      setFeedback('error')
-      setMessage('Por favor ingresa un código')
-      clearFeedback()
+  const handleCheckIn = async (fromButton: boolean) => {
+    const trimmed = code.trim()
+    setCode('')
+    inputRef.current?.focus()
+
+    if (!trimmed) {
+      // Un Enter vacío (p. ej. CR/LF del escáner) se ignora para no pisar el mensaje anterior
+      if (fromButton) showFeedback('error', 'Por favor ingresa un código')
       return
     }
 
-    setLoading(true)
+    const requestId = ++latestRequestRef.current
+    setPendingCount((count) => count + 1)
 
     try {
-      const member = await window.api.searchMemberByCode(code.trim())
-
-      if (!member) {
-        setFeedback('error')
-        setMessage('Miembro no encontrado')
-        clearFeedback()
-        setLoading(false)
-        return
-      }
-
-      const today = new Date()
-      const endDate = new Date(member.endDate)
-      const isExpired = endDate < today
-
-      if (isExpired) {
-        setFeedback('warning')
-        setMessage(`${member.name} - Membresía Expirada`)
-        await window.api.recordAttendance(member.id)
-        clearFeedback()
-        setLoading(false)
-        return
-      }
-
-      if (member.status === 'frozen') {
-        setFeedback('warning')
-        setMessage(`${member.name} - Membresía Congelada`)
-        clearFeedback()
-        setLoading(false)
-        return
-      }
-
-      await window.api.recordAttendance(member.id)
-      setFeedback('success')
-      setMessage(`¡Bienvenido ${member.name}!`)
-      clearFeedback()
+      const result = await window.checkInApi.checkIn(trimmed)
+      if (requestId !== latestRequestRef.current) return
+      const { type, message: text } = getFeedbackFromResult(result)
+      showFeedback(type, text)
     } catch (error) {
       console.error('Error during check-in:', error)
-      setFeedback('error')
-      setMessage('Error al registrar entrada')
-      clearFeedback()
+      if (requestId === latestRequestRef.current) showFeedback('error', 'Error al registrar entrada')
     } finally {
-      setLoading(false)
+      setPendingCount((count) => count - 1)
+      inputRef.current?.focus()
     }
   }
 
-  const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
-      handleCheckIn()
+      e.preventDefault()
+      handleCheckIn(false)
     }
   }
+
+  const loading = pendingCount > 0
 
   const getFeedbackColor = () => {
     switch (feedback) {
@@ -118,16 +119,15 @@ export function CheckIn({ standalone = false }: CheckInProps) {
                 type="text"
                 value={code}
                 onChange={(e) => setCode(e.target.value)}
-                onKeyPress={handleKeyPress}
+                onKeyDown={handleKeyDown}
                 placeholder="Código de miembro"
-                disabled={loading}
                 className="w-full px-4 py-3 text-lg border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100"
                 autoFocus
               />
             </div>
 
             <button
-              onClick={handleCheckIn}
+              onClick={() => handleCheckIn(true)}
               disabled={loading}
               className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-lg transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
             >
