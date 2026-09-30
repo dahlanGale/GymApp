@@ -13,7 +13,7 @@ import type {
 
 const api = {
   getData: (): Promise<AppData> => ipcRenderer.invoke('get-data'),
-  addMember: (member: Omit<Member, 'id' | 'createdAt'>): Promise<Member> =>
+  addMember: (member: Omit<Member, 'id' | 'code' | 'createdAt'>): Promise<Member> =>
     ipcRenderer.invoke('add-member', member),
   updateMember: (id: string, member: Partial<Member>): Promise<void> =>
     ipcRenderer.invoke('update-member', id, member),
