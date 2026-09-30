@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Layout, Dashboard, Members, Sales, Products, Memberships, Entries, MembershipSales, Attendances, Config } from './components'
+import { Layout, Dashboard, Members, Sales, SalesHistory, Products, Memberships, Entries, MembershipSales, Attendances, Config } from './components'
 import { AppData, Page } from './types'
 
 function App() {
@@ -45,6 +45,7 @@ function App() {
       {page === 'dashboard' && data && <Dashboard data={data} />}
       {page === 'members' && data && <Members data={data} updateData={updateData} />}
       {page === 'sales' && data && <Sales data={data} updateData={updateData} />}
+      {page === 'sales-history' && data && <SalesHistory data={data} />}
       {page === 'products' && data && <Products data={data} updateData={updateData} />}
       {page === 'memberships' && data && <Memberships data={data} updateData={updateData} />}
       {page === 'entries' && data && <Entries data={data} updateData={updateData} />}

@@ -247,6 +247,28 @@ function getLocalDateString(date: Date): string {
   return `${year}-${month}-${day}`
 }
 
+function isDateString(value: string | undefined): value is string {
+  return !!value && /^\d{4}-\d{2}-\d{2}$/.test(value)
+}
+
+function parseDateString(value: string): Date {
+  const [year, month, day] = value.split('-').map(Number)
+  return new Date(year, month - 1, day)
+}
+
+function addDaysToDateString(value: string, days: number): string {
+  const date = parseDateString(value)
+  date.setDate(date.getDate() + days)
+  return getLocalDateString(date)
+}
+
+function daysBetweenDateStrings(from: string, to: string): number {
+  const [fromYear, fromMonth, fromDay] = from.split('-').map(Number)
+  const [toYear, toMonth, toDay] = to.split('-').map(Number)
+  const msPerDay = 1000 * 60 * 60 * 24
+  return Math.round((Date.UTC(toYear, toMonth - 1, toDay) - Date.UTC(fromYear, fromMonth - 1, fromDay)) / msPerDay)
+}
+
 function isMembershipExpired(member: Member): boolean {
   if (member.status === 'expired') return true
   const endDate = member.endDate?.slice(0, 10)
@@ -420,6 +442,33 @@ app.whenReady().then(() => {
       data.members[index] = { ...current, ...updates, id: current.id, code: current.code }
       saveData()
     }
+  })
+
+  ipcMain.handle('freeze-member', (_event, id: string): Member | null => {
+    const member = data.members.find(m => m.id === id)
+    if (!member || member.status === 'frozen' || isMembershipExpired(member)) return null
+    member.status = 'frozen'
+    member.frozenAt = getLocalDateString(new Date())
+    saveData()
+    return member
+  })
+
+  ipcMain.handle('unfreeze-member', (_event, id: string): Member | null => {
+    const member = data.members.find(m => m.id === id)
+    if (!member || member.status !== 'frozen') return null
+
+    // Se devuelven los días congelados para que el miembro no pierda tiempo de su membresía
+    const today = getLocalDateString(new Date())
+    const endDate = member.endDate?.slice(0, 10)
+    if (isDateString(member.frozenAt) && isDateString(endDate)) {
+      const frozenDays = daysBetweenDateStrings(member.frozenAt, today)
+      if (frozenDays > 0) member.endDate = addDaysToDateString(endDate, frozenDays)
+    }
+
+    member.status = 'active'
+    delete member.frozenAt
+    saveData()
+    return member
   })
 
   ipcMain.handle('delete-member', (_event, id: string) => {
