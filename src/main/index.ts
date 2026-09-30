@@ -249,6 +249,86 @@ function mergeById<T extends { id: string }>(
   return { merged, added: merged.length - existing.length, skipped }
 }
 
+function detectCsvDelimiter(text: string): ',' | ';' {
+  // Excel en español suele exportar con punto y coma
+  const firstLine = text.split(/\r?\n/, 1)[0] ?? ''
+  const commas = (firstLine.match(/,/g) ?? []).length
+  const semicolons = (firstLine.match(/;/g) ?? []).length
+  return semicolons > commas ? ';' : ','
+}
+
+// RFC 4180: un campo entre comillas puede contener delimitadores, saltos de línea y comillas escapadas ("")
+function parseCsv(text: string): string[][] {
+  const input = text.replace(/^\uFEFF/, '')
+  const delimiter = detectCsvDelimiter(input)
+  const rows: string[][] = []
+  let row: string[] = []
+  let field = ''
+  let inQuotes = false
+
+  for (let i = 0; i < input.length; i++) {
+    const char = input[i]
+
+    if (inQuotes) {
+      if (char === '"' && input[i + 1] === '"') {
+        field += '"'
+        i++
+      } else if (char === '"') {
+        inQuotes = false
+      } else {
+        field += char
+      }
+      continue
+    }
+
+    if (char === '"') {
+      inQuotes = true
+    } else if (char === delimiter) {
+      row.push(field)
+      field = ''
+    } else if (char === '\n' || char === '\r') {
+      if (char === '\r' && input[i + 1] === '\n') i++
+      row.push(field)
+      rows.push(row)
+      row = []
+      field = ''
+    } else {
+      field += char
+    }
+  }
+
+  if (field !== '' || row.length > 0) {
+    row.push(field)
+    rows.push(row)
+  }
+
+  return rows.filter(values => values.some(value => value.trim() !== ''))
+}
+
+const CSV_MEMBER_STATUSES: Record<string, Member['status']> = {
+  active: 'active',
+  activo: 'active',
+  expired: 'expired',
+  expirado: 'expired',
+  frozen: 'frozen',
+  congelado: 'frozen'
+}
+
+function parseMemberStatus(value: string | undefined): Member['status'] {
+  return CSV_MEMBER_STATUSES[(value ?? '').trim().toLowerCase()] ?? 'active'
+}
+
+const PROMOTION_TYPES: NonNullable<Membership['promotionType']>[] = ['new_client', 'couple', 'no_maintenance']
+
+function parsePromotionType(value: string | undefined): Membership['promotionType'] {
+  const normalized = (value ?? '').trim().toLowerCase()
+  return PROMOTION_TYPES.find(type => type === normalized) ?? null
+}
+
+function parseCsvBoolean(value: string | undefined): boolean {
+  return ['true', '1', 'si', 'sí', 'yes'].includes((value ?? '').trim().toLowerCase())
+}
+
 function getLocalDateString(date: Date): string {
   const year = date.getFullYear()
   const month = String(date.getMonth() + 1).padStart(2, '0')
@@ -637,62 +717,70 @@ app.whenReady().then(() => {
     return { data, added, skipped }
   })
 
-  ipcMain.handle('import-csv', (_event, csvData: { type: 'members' | 'products' | 'memberships', data: string }) => {
-    const lines = csvData.data.split('\n').filter(line => line.trim())
-    if (lines.length < 2) return data
+  ipcMain.handle('import-csv', (_event, csvData: { type: 'members' | 'products' | 'memberships', data: string }): ImportSummary => {
+    const [headerRow, ...rows] = parseCsv(csvData.data)
+    if (!headerRow || rows.length === 0) return { data, added: 0, skipped: 0 }
 
-    const headers = lines[0].split(',').map(h => h.trim().toLowerCase())
-    
-    const generateId = () => Date.now().toString(36) + Math.random().toString(36).substr(2)
+    const headers = headerRow.map(h => h.trim().toLowerCase())
+    let added = 0
+    let skipped = 0
 
-    for (let i = 1; i < lines.length; i++) {
-      const values = lines[i].split(',').map(v => v.trim())
+    for (const values of rows) {
       const record: Record<string, string> = {}
       headers.forEach((header, index) => {
-        record[header] = values[index] || ''
+        record[header] = (values[index] ?? '').trim()
       })
+
+      // Una fila sin nombre no se puede identificar después; se omite
+      if (!record.name) {
+        skipped++
+        continue
+      }
 
       if (csvData.type === 'members') {
         const member: Member = {
           id: generateId(),
           code: normalizeMemberCode(record.code || ''),
-          name: record.name || '',
+          name: record.name,
           phone: record.phone || '',
           email: record.email || '',
           membershipId: record.membershipid || '',
-          startDate: record.startdate || getLocalDateString(new Date()),
-          endDate: record.enddate || '',
-          status: (record.status as 'active' | 'expired' | 'frozen') || 'active',
+          startDate: isDateString(record.startdate) ? record.startdate : getLocalDateString(new Date()),
+          endDate: isDateString(record.enddate) ? record.enddate : '',
+          status: parseMemberStatus(record.status),
           createdAt: new Date().toISOString()
         }
         data.members.push(member)
       } else if (csvData.type === 'products') {
         const product: Product = {
           id: generateId(),
-          name: record.name || '',
+          name: record.name,
           category: record.category || '',
           price: parseFloat(record.price) || 0,
-          stock: parseInt(record.stock) || 0
+          stock: Math.max(0, parseInt(record.stock, 10) || 0)
         }
         data.products.push(product)
       } else if (csvData.type === 'memberships') {
         const membership: Membership = {
           id: generateId(),
-          name: record.name || '',
+          name: record.name,
           price: parseFloat(record.price) || 0,
-          durationDays: parseInt(record.durationdays) || 30,
-          hasPromotion: record.haspromotion === 'true',
-          promotionType: record.promotiontype as 'new_client' | 'couple' | 'no_maintenance' | null,
+          durationDays: parseInt(record.durationdays, 10) || 30,
+          hasPromotion: parseCsvBoolean(record.haspromotion),
+          promotionType: parsePromotionType(record.promotiontype),
           promotionDiscount: parseFloat(record.promotiondiscount) || 0,
-          includesAnnualMaintenance: record.includesannualmaintenance === 'true'
+          includesAnnualMaintenance: parseCsvBoolean(record.includesannualmaintenance)
         }
         data.memberships.push(membership)
       }
+      added++
     }
 
-    ensureMemberCodes()
-    saveData()
-    return data
+    if (added > 0) {
+      ensureMemberCodes()
+      saveData()
+    }
+    return { data, added, skipped }
   })
 
   ipcMain.handle('check-in', (_event, code: string): CheckInResult => {

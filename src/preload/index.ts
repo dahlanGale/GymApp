@@ -40,7 +40,7 @@ const api = {
     ipcRenderer.invoke('update-config', config),
   importData: (data: Partial<AppData>): Promise<ImportSummary> => 
     ipcRenderer.invoke('import-data', data),
-  importCsv: (csvData: { type: 'members' | 'products' | 'memberships', data: string }): Promise<AppData> =>
+  importCsv: (csvData: { type: 'members' | 'products' | 'memberships', data: string }): Promise<ImportSummary> =>
     ipcRenderer.invoke('import-csv', csvData),
   onAttendanceRecorded: (callback: () => void): (() => void) => {
     const listener = (): void => callback()
