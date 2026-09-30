@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { AppData, MembershipSale } from '../types'
 import { Table, Button, Modal, Input, Badge, Card, StatCard, Select } from './UI'
 import { ColumnDef } from '@tanstack/react-table'
-import { toLocalDateString, addDaysToDateString, daysUntil, isValidDateString } from '../utils/dates'
+import { toLocalDateString, addDaysToDateString, daysUntil, isValidDateString, getMemberStatus } from '../utils/dates'
 
 interface MembershipSalesProps {
   data: AppData
@@ -173,7 +173,7 @@ export function MembershipSales({ data, updateData }: MembershipSalesProps) {
                       onChange={() => toggleMemberSelection(member.id)}
                       className="w-4 h-4 text-blue-600 rounded"
                     />
-                    <span className="text-sm text-gray-700">{member.name} {member.status === 'active' ? '(Activo)' : ''}</span>
+                    <span className="text-sm text-gray-700">{member.name} {getMemberStatus(member) === 'active' ? '(Activo)' : ''}</span>
                   </label>
                 ))
               )}

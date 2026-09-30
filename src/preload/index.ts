@@ -8,7 +8,9 @@ import type {
   Entry,
   MembershipSale,
   BusinessConfig,
-  AppData
+  AppData,
+  AddSaleResult,
+  ImportSummary
 } from '../shared/types'
 
 const api = {
@@ -30,13 +32,13 @@ const api = {
   updateProduct: (id: string, product: Partial<Product>): Promise<void> =>
     ipcRenderer.invoke('update-product', id, product),
   deleteProduct: (id: string): Promise<void> => ipcRenderer.invoke('delete-product', id),
-  addSale: (sale: Omit<Sale, 'id'>): Promise<Sale> => ipcRenderer.invoke('add-sale', sale),
+  addSale: (sale: Omit<Sale, 'id'>): Promise<AddSaleResult> => ipcRenderer.invoke('add-sale', sale),
   addEntry: (entry: Omit<Entry, 'id'>): Promise<Entry> => ipcRenderer.invoke('add-entry', entry),
   addMembershipSale: (sale: Omit<MembershipSale, 'id'>): Promise<MembershipSale> => 
     ipcRenderer.invoke('add-membership-sale', sale),
   updateConfig: (config: BusinessConfig): Promise<void> => 
     ipcRenderer.invoke('update-config', config),
-  importData: (data: Partial<AppData>): Promise<AppData> => 
+  importData: (data: Partial<AppData>): Promise<ImportSummary> => 
     ipcRenderer.invoke('import-data', data),
   importCsv: (csvData: { type: 'members' | 'products' | 'memberships', data: string }): Promise<AppData> =>
     ipcRenderer.invoke('import-csv', csvData),
