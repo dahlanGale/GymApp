@@ -11,6 +11,8 @@ export interface Member {
   startDate: string
   endDate: string
   status: 'active' | 'expired' | 'frozen'
+  // Fecha local (YYYY-MM-DD) en que se congeló; al descongelar se recorre endDate esos días
+  frozenAt?: string
   createdAt: string
 }
 
