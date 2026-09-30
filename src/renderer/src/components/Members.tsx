@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { AppData, Member } from '../types'
 import { Table, Button, Modal, Input, Select, Badge } from './UI'
 import { ColumnDef } from '@tanstack/react-table'
+import { MemberCredential } from './MemberCredential'
 import { toLocalDateString, addDaysToDateString, isValidDateString, getMemberStatus } from '../utils/dates'
 
 interface MembersProps {
@@ -13,6 +14,7 @@ export function Members({ data, updateData }: MembersProps) {
   const [search, setSearch] = useState('')
   const [showModal, setShowModal] = useState(false)
   const [editingMember, setEditingMember] = useState<Member | null>(null)
+  const [credentialMember, setCredentialMember] = useState<Member | null>(null)
   const [form, setForm] = useState({
     name: '',
     phone: '',
@@ -23,10 +25,16 @@ export function Members({ data, updateData }: MembersProps) {
 
   const filteredMembers = data.members.filter(m =>
     m.name.toLowerCase().includes(search.toLowerCase()) ||
-    m.phone.includes(search)
+    m.phone.includes(search) ||
+    m.code.includes(search.trim().toUpperCase())
   )
 
   const membersColumns: ColumnDef<Member>[] = [
+    {
+      accessorKey: 'code',
+      header: 'Código',
+      cell: info => <span className="font-mono">{info.getValue() as string}</span>,
+    },
     { accessorKey: 'name', header: 'Nombre' },
     { accessorKey: 'phone', header: 'Teléfono' },
     { accessorKey: 'email', header: 'Email' },
@@ -52,6 +60,7 @@ export function Members({ data, updateData }: MembersProps) {
       header: 'Acciones',
       cell: ({ row }) => (
         <div className="flex gap-2">
+          <Button size="sm" variant="secondary" onClick={() => setCredentialMember(row.original)}>Credencial</Button>
           <Button size="sm" variant="secondary" onClick={() => handleEdit(row.original)}>Editar</Button>
           <Button size="sm" variant="danger" onClick={() => handleDelete(row.original.id)}>Eliminar</Button>
         </div>
@@ -174,6 +183,12 @@ export function Members({ data, updateData }: MembersProps) {
           <Button onClick={handleSubmit}>Guardar</Button>
         </div>
       </Modal>
+
+      <MemberCredential
+        member={credentialMember}
+        gymName={data.config.gymName}
+        onClose={() => setCredentialMember(null)}
+      />
     </>
   )
 }
