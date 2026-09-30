@@ -1,0 +1,27 @@
+name: CI
+
+on:
+  pull_request:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+jobs:
+  typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Instalar dependencias
+        run: npm ci
+        env:
+          # El binario de Electron no hace falta para revisar tipos
+          ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+
+      - name: Revisar tipos
+        run: npm run typecheck

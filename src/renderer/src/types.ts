@@ -12,4 +12,4 @@ export type {
   AppData
 } from '../../shared/types'
 
-export type Page = 'dashboard' | 'members' | 'sales' | 'products' | 'memberships' | 'entries' | 'membership-sales' | 'attendances' | 'config'
+export type Page = 'dashboard' | 'members' | 'sales' | 'products' | 'memberships' | 'entries' | 'membership-sales' | 'sales-history' | 'attendances' | 'config'

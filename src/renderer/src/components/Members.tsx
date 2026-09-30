@@ -58,13 +58,22 @@ export function Members({ data, updateData }: MembersProps) {
     {
       id: 'actions',
       header: 'Acciones',
-      cell: ({ row }) => (
+      cell: ({ row }) => {
+        const status = getMemberStatus(row.original)
+        return (
         <div className="flex gap-2">
           <Button size="sm" variant="secondary" onClick={() => setCredentialMember(row.original)}>Credencial</Button>
+          {status === 'active' && (
+            <Button size="sm" variant="secondary" onClick={() => handleFreeze(row.original)}>Congelar</Button>
+          )}
+          {status === 'frozen' && (
+            <Button size="sm" variant="success" onClick={() => handleUnfreeze(row.original)}>Descongelar</Button>
+          )}
           <Button size="sm" variant="secondary" onClick={() => handleEdit(row.original)}>Editar</Button>
           <Button size="sm" variant="danger" onClick={() => handleDelete(row.original.id)}>Eliminar</Button>
         </div>
-      ),
+        )
+      },
     },
   ]
 
@@ -109,6 +118,26 @@ export function Members({ data, updateData }: MembersProps) {
       startDate: member.startDate
     })
     setShowModal(true)
+  }
+
+  const handleFreeze = async (member: Member) => {
+    if (!confirm(`¿Congelar la membresía de ${member.name}? No podrá hacer check-in hasta descongelarla.`)) return
+    const updated = await window.api.freezeMember(member.id)
+    if (!updated) alert('No se pudo congelar la membresía')
+    const newData = await window.api.getData()
+    updateData(newData)
+  }
+
+  const handleUnfreeze = async (member: Member) => {
+    if (!confirm(`¿Descongelar la membresía de ${member.name}? Los días congelados se agregan a su vencimiento.`)) return
+    const updated = await window.api.unfreezeMember(member.id)
+    if (!updated) {
+      alert('No se pudo descongelar la membresía')
+    } else if (updated.endDate !== member.endDate) {
+      alert(`Membresía reactivada. Nuevo vencimiento: ${updated.endDate}`)
+    }
+    const newData = await window.api.getData()
+    updateData(newData)
   }
 
   const handleDelete = async (id: string) => {
