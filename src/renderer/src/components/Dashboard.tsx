@@ -2,16 +2,17 @@ import { useState } from 'react'
 import { AppData } from '../types'
 import { Table, StatCard, Card } from './UI'
 import { ColumnDef } from '@tanstack/react-table'
+import { toLocalDateString, getMemberStatus, isValidDateString } from '../utils/dates'
 
 interface DashboardProps {
   data: AppData
 }
 
 export function Dashboard({ data }: DashboardProps) {
-  const today = new Date().toISOString().split('T')[0]
-  const todaySales = data.sales.filter(s => s.date.startsWith(today))
+  const today = toLocalDateString()
+  const todaySales = data.sales.filter(s => toLocalDateString(new Date(s.date)) === today)
   const todayRevenue = todaySales.reduce((sum, s) => sum + s.total, 0)
-  const activeMembers = data.members.filter(m => m.status === 'active').length
+  const activeMembers = data.members.filter(m => getMemberStatus(m, today) === 'active').length
 
   const recentSales = [...data.sales].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5)
 
@@ -49,11 +50,9 @@ export function Dashboard({ data }: DashboardProps) {
 
   const monthNames = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
 
+  const monthPrefix = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-`
   const expirationsInMonth = data.members
-    .filter(m => {
-      const expDate = new Date(m.endDate)
-      return expDate.getMonth() === currentMonth && expDate.getFullYear() === currentYear
-    })
+    .filter(m => isValidDateString(m.endDate) && m.endDate.startsWith(monthPrefix))
     .sort((a, b) => a.endDate.localeCompare(b.endDate))
 
   const prevMonth = () => {

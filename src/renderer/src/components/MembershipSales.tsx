@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { AppData, MembershipSale } from '../types'
 import { Table, Button, Modal, Input, Badge, Card, StatCard, Select } from './UI'
 import { ColumnDef } from '@tanstack/react-table'
+import { toLocalDateString, addDaysToDateString, daysUntil, isValidDateString } from '../utils/dates'
 
 interface MembershipSalesProps {
   data: AppData
@@ -22,18 +23,21 @@ export function MembershipSales({ data, updateData }: MembershipSalesProps) {
 
   const recentSales = [...data.membershipSales].sort((a, b) => b.purchaseDate.localeCompare(a.purchaseDate))
 
+  // El día de vencimiento todavía cuenta como válido (diffDays === 0)
+  const getDaysLeft = (expirationDate: string) =>
+    isValidDateString(expirationDate) ? daysUntil(expirationDate) : -1
+
   const getStatusColor = (expirationDate: string) => {
-    const today = new Date()
-    const exp = new Date(expirationDate)
-    const diffDays = Math.ceil((exp.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
+    const diffDays = getDaysLeft(expirationDate)
     if (diffDays < 0) return 'danger'
     if (diffDays <= 7) return 'warning'
     return 'success'
   }
 
   const getStatusLabel = (expirationDate: string) => {
-    if (new Date(expirationDate) < new Date()) return 'Vencida'
-    if (Math.ceil((new Date(expirationDate).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)) <= 7) return 'Por Vencer'
+    const diffDays = getDaysLeft(expirationDate)
+    if (diffDays < 0) return 'Vencida'
+    if (diffDays <= 7) return 'Por Vencer'
     return 'Activa'
   }
 
@@ -52,7 +56,8 @@ export function MembershipSales({ data, updateData }: MembershipSalesProps) {
     },
     { accessorKey: 'expirationDate', header: 'Vencimiento' },
     {
-      accessorKey: 'expirationDate',
+      id: 'status',
+      accessorFn: sale => getStatusLabel(sale.expirationDate),
       header: 'Estado',
       cell: ({ row }) => (
         <Badge variant={getStatusColor(row.original.expirationDate)}>
@@ -76,9 +81,8 @@ export function MembershipSales({ data, updateData }: MembershipSalesProps) {
     const membership = data.memberships.find(m => m.id === selectedMembership)
     if (!membership) return
 
-    const purchaseDate = new Date().toISOString().split('T')[0]
-    const expirationDate = new Date()
-    expirationDate.setDate(expirationDate.getDate() + membership.durationDays)
+    const purchaseDate = toLocalDateString()
+    const expirationDate = addDaysToDateString(purchaseDate, membership.durationDays)
 
     const memberNames = selectedMembers.map(id => {
       const member = data.members.find(m => m.id === id)
@@ -95,7 +99,7 @@ export function MembershipSales({ data, updateData }: MembershipSalesProps) {
       memberIds: selectedMembers,
       memberNames,
       purchaseDate,
-      expirationDate: expirationDate.toISOString().split('T')[0],
+      expirationDate,
       price: finalPrice,
       paymentMethod
     })
