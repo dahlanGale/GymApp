@@ -1,14 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { CheckInResult } from '../types'
 
-declare global {
-  interface Window {
-    checkInApi: {
-      checkIn: (code: string) => Promise<CheckInResult>
-    }
-  }
-}
-
 type FeedbackType = 'success' | 'error' | 'warning' | null
 
 interface CheckInProps {
