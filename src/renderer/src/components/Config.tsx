@@ -39,11 +39,18 @@ export function Config({ data, updateData }: ConfigProps) {
     setImporting(true)
     try {
       const text = await file.text()
-      const importedData = JSON.parse(text)
-      
-      const newData = await window.api.importData(importedData)
-      updateData(newData)
-      alert('Datos importados correctamente')
+      const importedData: Partial<AppData> = JSON.parse(text)
+
+      const summary = await window.api.importData(importedData)
+      updateData(summary.data)
+      if (summary.added === 0) {
+        alert(summary.skipped > 0
+          ? `No se agregó nada: los ${summary.skipped} registros del archivo ya existían.`
+          : 'El archivo no contiene registros para importar.')
+      } else {
+        alert(`Importación completa: ${summary.added} registros agregados` +
+          (summary.skipped > 0 ? `, ${summary.skipped} omitidos por ya existir.` : '.'))
+      }
     } catch (error) {
       alert('Error al importar datos. Verifique el formato del archivo.')
     } finally {

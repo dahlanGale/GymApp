@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { AppData, Product } from '../types'
+import { getMemberStatus } from '../utils/dates'
 
 interface CartItem {
   productId: string
@@ -65,7 +66,7 @@ export function Sales({ data, updateData }: SalesProps) {
 
     const member = data.members.find(m => m.id === selectedMemberId)
 
-    await window.api.addSale({
+    const result = await window.api.addSale({
       memberId: selectedMemberId || null,
       memberName: member?.name || null,
       items: cart.map(item => ({
@@ -81,6 +82,13 @@ export function Sales({ data, updateData }: SalesProps) {
 
     const newData = await window.api.getData()
     updateData(newData)
+
+    if (!result.ok) {
+      // Se conserva el carrito para que se ajuste con el stock actualizado
+      alert(`No se pudo procesar la venta. ${result.error}`)
+      return
+    }
+
     setCart([])
     setSelectedMemberId('')
     alert('Venta procesada correctamente!')
@@ -131,7 +139,7 @@ export function Sales({ data, updateData }: SalesProps) {
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               >
                 <option value="">Cliente General</option>
-                {data.members.filter(m => m.status === 'active').map(member => (
+                {data.members.filter(m => getMemberStatus(m) === 'active').map(member => (
                   <option key={member.id} value={member.id}>{member.name}</option>
                 ))}
               </select>
