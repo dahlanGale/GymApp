@@ -67,9 +67,15 @@ export function Config({ data, updateData }: ConfigProps) {
     try {
       const text = await file.text()
       
-      const newData = await window.api.importCsv({ type: importType, data: text })
-      updateData(newData)
-      alert(`${importType === 'members' ? 'Miembros' : importType === 'products' ? 'Productos' : 'Membresías'} importados correctamente`)
+      const summary = await window.api.importCsv({ type: importType, data: text })
+      updateData(summary.data)
+      const label = importType === 'members' ? 'miembros' : importType === 'products' ? 'productos' : 'membresías'
+      if (summary.added === 0) {
+        alert(`No se importaron ${label}. Verifique que el archivo tenga encabezados y una columna "name".`)
+      } else {
+        alert(`Se importaron ${summary.added} ${label}` +
+          (summary.skipped > 0 ? `; ${summary.skipped} filas omitidas por no tener nombre.` : '.'))
+      }
     } catch (error) {
       alert('Error al importar datos. Verifique el formato del archivo CSV.')
     } finally {
