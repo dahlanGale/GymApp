@@ -12,6 +12,8 @@ import type {
   MembershipSale,
   Attendance,
   CheckInResult,
+  AddSaleResult,
+  ImportSummary,
   BusinessConfig,
   AppData
 } from '../shared/types'
@@ -228,16 +230,23 @@ function ensureMemberCodes(): boolean {
 }
 
 // Agrega solo los elementos cuyo id no existe todavía, para que importar dos veces no duplique
-function mergeById<T extends { id: string }>(existing: T[], incoming: T[] | undefined): T[] {
-  if (!Array.isArray(incoming)) return existing
+function mergeById<T extends { id: string }>(
+  existing: T[],
+  incoming: T[] | undefined
+): { merged: T[]; added: number; skipped: number } {
+  if (!Array.isArray(incoming)) return { merged: existing, added: 0, skipped: 0 }
   const ids = new Set(existing.map(item => item.id))
   const merged = [...existing]
+  let skipped = 0
   for (const item of incoming) {
-    if (!isRecord(item) || typeof item.id !== 'string' || ids.has(item.id)) continue
+    if (!isRecord(item) || typeof item.id !== 'string' || ids.has(item.id)) {
+      skipped++
+      continue
+    }
     ids.add(item.id)
     merged.push(item)
   }
-  return merged
+  return { merged, added: merged.length - existing.length, skipped }
 }
 
 function getLocalDateString(date: Date): string {
@@ -522,7 +531,29 @@ app.whenReady().then(() => {
     saveData()
   })
 
-  ipcMain.handle('add-sale', (_event, sale: Omit<Sale, 'id'>) => {
+  ipcMain.handle('add-sale', (_event, sale: Omit<Sale, 'id'>): AddSaleResult => {
+    if (!Array.isArray(sale.items) || sale.items.length === 0) {
+      return { ok: false, error: 'La venta no tiene productos' }
+    }
+
+    // Se valida contra el stock actual del proceso main; la pantalla puede tener datos viejos
+    const requested = new Map<string, number>()
+    for (const item of sale.items) {
+      if (!Number.isInteger(item.quantity) || item.quantity <= 0) {
+        return { ok: false, error: `Cantidad inválida para ${item.productName}` }
+      }
+      requested.set(item.productId, (requested.get(item.productId) ?? 0) + item.quantity)
+    }
+    for (const [productId, quantity] of requested) {
+      const product = data.products.find(p => p.id === productId)
+      if (!product) {
+        return { ok: false, error: 'Uno de los productos de la venta ya no existe' }
+      }
+      if (product.stock < quantity) {
+        return { ok: false, error: `Stock insuficiente de ${product.name}: quedan ${product.stock}` }
+      }
+    }
+
     const newSale: Sale = {
       ...sale,
       id: generateId()
@@ -537,7 +568,7 @@ app.whenReady().then(() => {
     }
     
     saveData()
-    return newSale
+    return { ok: true, sale: newSale }
   })
 
   ipcMain.handle('add-entry', (_event, entry: Omit<Entry, 'id'>) => {
@@ -582,18 +613,28 @@ app.whenReady().then(() => {
     saveData()
   })
 
-  ipcMain.handle('import-data', (_event, importedData: Partial<AppData>) => {
-    if (!isRecord(importedData)) return data
-    data.members = mergeById(data.members, importedData.members)
-    data.memberships = mergeById(data.memberships, importedData.memberships)
-    data.products = mergeById(data.products, importedData.products)
-    data.sales = mergeById(data.sales, importedData.sales)
-    data.entries = mergeById(data.entries, importedData.entries)
-    data.membershipSales = mergeById(data.membershipSales, importedData.membershipSales)
-    data.attendances = mergeById(data.attendances, importedData.attendances)
+  ipcMain.handle('import-data', (_event, importedData: Partial<AppData>): ImportSummary => {
+    if (!isRecord(importedData)) return { data, added: 0, skipped: 0 }
+
+    let added = 0
+    let skipped = 0
+    const merge = <T extends { id: string }>(existing: T[], incoming: T[] | undefined): T[] => {
+      const result = mergeById(existing, incoming)
+      added += result.added
+      skipped += result.skipped
+      return result.merged
+    }
+
+    data.members = merge(data.members, importedData.members)
+    data.memberships = merge(data.memberships, importedData.memberships)
+    data.products = merge(data.products, importedData.products)
+    data.sales = merge(data.sales, importedData.sales)
+    data.entries = merge(data.entries, importedData.entries)
+    data.membershipSales = merge(data.membershipSales, importedData.membershipSales)
+    data.attendances = merge(data.attendances, importedData.attendances)
     ensureMemberCodes()
-    saveData()
-    return data
+    if (added > 0) saveData()
+    return { data, added, skipped }
   })
 
   ipcMain.handle('import-csv', (_event, csvData: { type: 'members' | 'products' | 'memberships', data: string }) => {
