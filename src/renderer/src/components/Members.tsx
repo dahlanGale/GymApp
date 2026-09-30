@@ -3,6 +3,7 @@ import { AppData, Member } from '../types'
 import { Table, Button, Modal, Input, Select, Badge } from './UI'
 import { ColumnDef } from '@tanstack/react-table'
 import { MemberCredential } from './MemberCredential'
+import { MemberHistory } from './MemberHistory'
 import { toLocalDateString, addDaysToDateString, isValidDateString, getMemberStatus } from '../utils/dates'
 
 interface MembersProps {
@@ -15,6 +16,7 @@ export function Members({ data, updateData }: MembersProps) {
   const [showModal, setShowModal] = useState(false)
   const [editingMember, setEditingMember] = useState<Member | null>(null)
   const [credentialMember, setCredentialMember] = useState<Member | null>(null)
+  const [historyMember, setHistoryMember] = useState<Member | null>(null)
   const [form, setForm] = useState({
     name: '',
     phone: '',
@@ -62,6 +64,7 @@ export function Members({ data, updateData }: MembersProps) {
         const status = getMemberStatus(row.original)
         return (
         <div className="flex gap-2">
+          <Button size="sm" variant="secondary" onClick={() => setHistoryMember(row.original)}>Historial</Button>
           <Button size="sm" variant="secondary" onClick={() => setCredentialMember(row.original)}>Credencial</Button>
           {status === 'active' && (
             <Button size="sm" variant="secondary" onClick={() => handleFreeze(row.original)}>Congelar</Button>
@@ -212,6 +215,12 @@ export function Members({ data, updateData }: MembersProps) {
           <Button onClick={handleSubmit}>Guardar</Button>
         </div>
       </Modal>
+
+      <MemberHistory
+        member={historyMember}
+        data={data}
+        onClose={() => setHistoryMember(null)}
+      />
 
       <MemberCredential
         member={credentialMember}
