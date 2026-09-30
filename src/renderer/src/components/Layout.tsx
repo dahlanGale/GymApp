@@ -64,6 +64,13 @@ export function Layout({ page, setPage, children }: LayoutProps) {
             Venta Membresías
           </NavItem>
           <NavItem 
+            active={page === 'attendances'} 
+            onClick={() => setPage('attendances')}
+            icon={<AttendanceIcon />}
+          >
+            Asistencias
+          </NavItem>
+          <NavItem 
             active={page === 'config'} 
             onClick={() => setPage('config')}
             icon={<SettingsIcon />}
@@ -162,6 +169,16 @@ function CardIcon() {
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
       <rect x="1" y="4" width="22" height="16" rx="2" />
       <line x1="1" y1="10" x2="23" y2="10" />
+    </svg>
+  )
+}
+
+function AttendanceIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+      <circle cx="8.5" cy="7" r="4" />
+      <polyline points="17 11 19 13 23 9" />
     </svg>
   )
 }

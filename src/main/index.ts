@@ -3,112 +3,23 @@ import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import log from 'electron-log/main'
 import * as fs from 'fs'
+import type {
+  Member,
+  Membership,
+  Product,
+  Sale,
+  Entry,
+  MembershipSale,
+  Attendance,
+  CheckInResult,
+  BusinessConfig,
+  AppData
+} from '../shared/types'
 
 log.initialize()
 log.info('Application starting...')
 
-interface Member {
-  id: string
-  name: string
-  phone: string
-  email: string
-  membershipId: string
-  startDate: string
-  endDate: string
-  status: 'active' | 'expired' | 'frozen'
-  createdAt: string
-}
-
-interface Membership {
-  id: string
-  name: string
-  price: number
-  durationDays: number
-  hasPromotion: boolean
-  promotionType: 'new_client' | 'couple' | 'no_maintenance' | null
-  promotionDiscount: number
-  includesAnnualMaintenance: boolean
-}
-
-interface Product {
-  id: string
-  name: string
-  category: string
-  price: number
-  stock: number
-}
-
-interface SaleItem {
-  productId: string
-  productName: string
-  quantity: number
-  price: number
-}
-
-interface Sale {
-  id: string
-  memberId: string | null
-  memberName: string | null
-  items: SaleItem[]
-  total: number
-  paymentMethod: 'cash' | 'card'
-  date: string
-}
-
-interface Entry {
-  id: string
-  productId: string
-  productName: string
-  quantity: number
-  unitCost: number
-  supplier: string
-  date: string
-}
-
-interface MembershipSale {
-  id: string
-  membershipId: string
-  membershipName: string
-  memberIds: string[]
-  memberNames: string[]
-  purchaseDate: string
-  expirationDate: string
-  price: number
-  paymentMethod: 'cash' | 'card'
-}
-
-interface Attendance {
-  id: string
-  memberId: string
-  memberName: string
-  timestamp: string
-}
-
-type CheckInResult =
-  | { status: 'not_found' }
-  | { status: 'ambiguous' }
-  | { status: 'success' | 'duplicate' | 'expired' | 'frozen'; memberName: string }
-
 const DUPLICATE_CHECK_IN_WINDOW_MS = 2 * 60 * 1000
-
-interface BusinessConfig {
-  gymName: string
-  address: string
-  phone: string
-  email: string
-  annualMaintenanceCost: number
-}
-
-interface AppData {
-  members: Member[]
-  memberships: Membership[]
-  products: Product[]
-  sales: Sale[]
-  entries: Entry[]
-  membershipSales: MembershipSale[]
-  attendances: Attendance[]
-  config: BusinessConfig
-}
 
 const defaultData: AppData = {
   members: [],
@@ -325,12 +236,6 @@ app.whenReady().then(() => {
   loadData()
 
   ipcMain.handle('get-data', () => data)
-
-  ipcMain.handle('save-data', (_event, newData: AppData) => {
-    // Las asistencias solo se escriben desde el proceso main (check-in), nunca desde una copia del renderer
-    data = { ...newData, attendances: data.attendances }
-    saveData()
-  })
 
   ipcMain.handle('add-member', (_event, member: Omit<Member, 'id' | 'createdAt'>) => {
     const newMember: Member = {
@@ -571,6 +476,9 @@ app.whenReady().then(() => {
 
     data.attendances.push(attendance)
     saveData()
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('attendance-recorded')
+    }
     return { status: 'success', memberName: member.name }
   })
 

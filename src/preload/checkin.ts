@@ -1,9 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
-
-export type CheckInResult =
-  | { status: 'not_found' }
-  | { status: 'ambiguous' }
-  | { status: 'success' | 'duplicate' | 'expired' | 'frozen'; memberName: string }
+import type { CheckInResult } from '../shared/types'
 
 const checkInApi = {
   checkIn: (code: string): Promise<CheckInResult> => ipcRenderer.invoke('check-in', code)
