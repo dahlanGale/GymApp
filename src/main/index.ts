@@ -783,49 +783,6 @@ app.whenReady().then(() => {
     return { data, added, skipped }
   })
 
-      if (csvData.type === 'members') {
-        const member: Member = {
-          id: generateId(),
-          code: normalizeMemberCode(record.code || ''),
-          name: record.name || '',
-          phone: record.phone || '',
-          email: record.email || '',
-          membershipId: record.membershipid || '',
-          startDate: record.startdate || getLocalDateString(new Date()),
-          endDate: record.enddate || '',
-          status: (record.status as 'active' | 'expired' | 'frozen') || 'active',
-          createdAt: new Date().toISOString()
-        }
-        data.members.push(member)
-      } else if (csvData.type === 'products') {
-        const product: Product = {
-          id: generateId(),
-          name: record.name || '',
-          category: record.category || '',
-          price: parseFloat(record.price) || 0,
-          stock: parseInt(record.stock) || 0
-        }
-        data.products.push(product)
-      } else if (csvData.type === 'memberships') {
-        const membership: Membership = {
-          id: generateId(),
-          name: record.name || '',
-          price: parseFloat(record.price) || 0,
-          durationDays: parseInt(record.durationdays) || 30,
-          hasPromotion: record.haspromotion === 'true',
-          promotionType: record.promotiontype as 'new_client' | 'couple' | 'no_maintenance' | null,
-          promotionDiscount: parseFloat(record.promotiondiscount) || 0,
-          includesAnnualMaintenance: record.includesannualmaintenance === 'true'
-        }
-        data.memberships.push(membership)
-      }
-    }
-
-    ensureMemberCodes()
-    saveData()
-    return data
-  })
-
   ipcMain.handle('check-in', (_event, code: string): CheckInResult => {
     const member = findMemberByCode(code)
     if (member === 'ambiguous') return { status: 'ambiguous' }
