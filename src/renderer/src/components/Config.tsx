@@ -19,8 +19,9 @@ export function Config({ data, updateData }: ConfigProps) {
     alert('Configuración guardada correctamente')
   }
 
-  const handleExport = () => {
-    const dataStr = JSON.stringify(data, null, 2)
+  const handleExport = async () => {
+    const freshData = await window.api.getData()
+    const dataStr = JSON.stringify(freshData, null, 2)
     const blob = new Blob([dataStr], { type: 'application/json' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
