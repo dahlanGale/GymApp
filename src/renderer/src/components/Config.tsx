@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { AppData, BusinessConfig } from '../types'
 import { Button, Card, Input } from './UI'
+import { toLocalDateString } from '../utils/dates'
 
 interface ConfigProps {
   data: AppData
@@ -19,13 +20,14 @@ export function Config({ data, updateData }: ConfigProps) {
     alert('Configuración guardada correctamente')
   }
 
-  const handleExport = () => {
-    const dataStr = JSON.stringify(data, null, 2)
+  const handleExport = async () => {
+    const freshData = await window.api.getData()
+    const dataStr = JSON.stringify(freshData, null, 2)
     const blob = new Blob([dataStr], { type: 'application/json' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `gym-pos-backup-${new Date().toISOString().split('T')[0]}.json`
+    a.download = `gym-pos-backup-${toLocalDateString()}.json`
     a.click()
     URL.revokeObjectURL(url)
   }
