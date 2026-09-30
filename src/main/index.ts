@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, Menu } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, Menu } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import log from 'electron-log/main'
@@ -46,39 +46,198 @@ const defaultData: AppData = {
   }
 }
 
-let data: AppData = { ...defaultData }
+type CollectionKey = Exclude<keyof AppData, 'config'>
+
+const COLLECTION_KEYS: CollectionKey[] = [
+  'members',
+  'memberships',
+  'products',
+  'sales',
+  'entries',
+  'membershipSales',
+  'attendances'
+]
+
+const MEMBER_CODE_START = 1001
+const MEMBER_CODE_PATTERN = /^[0-9A-Z-]{1,20}$/
+
+function createDefaultData(): AppData {
+  return structuredClone(defaultData)
+}
+
+let data: AppData = createDefaultData()
 let dataPath: string
+let loadWarning: string | null = null
 
 function getDataPath(): string {
   const userDataPath = app.getPath('userData')
   return join(userDataPath, 'gym-pos-data.json')
 }
 
-function loadData(): void {
+function getBackupPath(): string {
+  return `${dataPath}.bak`
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+// Devuelve null si el archivo no se puede leer o no tiene la forma de AppData
+function readDataFile(filePath: string): AppData | null {
   try {
-    dataPath = getDataPath()
-    if (fs.existsSync(dataPath)) {
-      const fileData = fs.readFileSync(dataPath, 'utf-8')
-      const parsed = JSON.parse(fileData)
-      data = { ...defaultData, ...parsed }
-      log.info('Data loaded from file')
-    } else {
-      saveData()
-      log.info('Created default data file')
+    const parsed: unknown = JSON.parse(fs.readFileSync(filePath, 'utf-8'))
+    if (!isRecord(parsed)) return null
+
+    const result = createDefaultData()
+    for (const key of COLLECTION_KEYS) {
+      const value: unknown = parsed[key]
+      if (value === undefined) continue
+      if (!Array.isArray(value)) return null
+      Object.assign(result, { [key]: value as unknown[] })
     }
+    if (isRecord(parsed.config)) {
+      result.config = { ...result.config, ...(parsed.config as Partial<BusinessConfig>) }
+    }
+    return result
   } catch (error) {
-    log.error('Error loading data:', error)
-    data = { ...defaultData }
+    log.error(`Error reading data file ${filePath}:`, error)
+    return null
   }
 }
 
-function saveData(): void {
+// Mueve el archivo dañado a un lado para que ningún guardado posterior lo sobrescriba
+function preserveCorruptFile(): string | null {
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
+  const corruptPath = dataPath.replace(/\.json$/, `.corrupt-${timestamp}.json`)
   try {
-    fs.writeFileSync(dataPath, JSON.stringify(data, null, 2), 'utf-8')
+    fs.renameSync(dataPath, corruptPath)
+    log.warn(`Corrupt data file moved to ${corruptPath}`)
+    return corruptPath
+  } catch (error) {
+    log.error('Error preserving corrupt data file:', error)
+    return null
+  }
+}
+
+function loadData(): void {
+  dataPath = getDataPath()
+
+  if (!fs.existsSync(dataPath)) {
+    data = createDefaultData()
+    saveData()
+    log.info('Created default data file')
+    return
+  }
+
+  const loaded = readDataFile(dataPath)
+  if (loaded) {
+    data = loaded
+    if (ensureMemberCodes()) saveData()
+    log.info('Data loaded from file')
+    return
+  }
+
+  const corruptPath = preserveCorruptFile()
+  if (!corruptPath) {
+    // Si no se pudo apartar el archivo dañado, no se guarda nada para no sobrescribirlo
+    data = createDefaultData()
+    dataPath = ''
+    loadWarning = 'No se pudo leer el archivo de datos ni moverlo a un lugar seguro. Los cambios de esta sesión no se guardarán. Revisa el registro de la aplicación.'
+    return
+  }
+
+  const backupPath = getBackupPath()
+  const backup = fs.existsSync(backupPath) ? readDataFile(backupPath) : null
+  if (backup) {
+    data = backup
+    ensureMemberCodes()
+    saveData()
+    loadWarning = `El archivo de datos estaba dañado y se restauró el último respaldo. Es posible que falten los cambios más recientes. El archivo dañado se guardó en:\n${corruptPath}`
+    log.warn('Data restored from backup')
+  } else {
+    data = createDefaultData()
+    loadWarning = `El archivo de datos estaba dañado y no había respaldo válido. Se inició con datos vacíos. El archivo dañado se guardó en:\n${corruptPath}`
+    log.warn('No valid backup found, starting with default data')
+  }
+}
+
+// Escritura atómica: archivo temporal + fsync + rename; la versión anterior queda en .bak
+function saveData(): void {
+  if (!dataPath) {
+    log.warn('Save skipped: data file unavailable')
+    return
+  }
+
+  const tmpPath = `${dataPath}.tmp`
+  try {
+    const fd = fs.openSync(tmpPath, 'w')
+    try {
+      fs.writeFileSync(fd, JSON.stringify(data, null, 2), 'utf-8')
+      fs.fsyncSync(fd)
+    } finally {
+      fs.closeSync(fd)
+    }
+    if (fs.existsSync(dataPath)) {
+      fs.copyFileSync(dataPath, getBackupPath())
+    }
+    fs.renameSync(tmpPath, dataPath)
     log.info('Data saved')
   } catch (error) {
     log.error('Error saving data:', error)
   }
+}
+
+function normalizeMemberCode(code: string): string {
+  return code.trim().toUpperCase()
+}
+
+function getNextMemberCode(): string {
+  const maxCode = data.members.reduce((max, member) => {
+    const numeric = /^\d+$/.test(member.code ?? '') ? parseInt(member.code, 10) : 0
+    return Math.max(max, numeric)
+  }, MEMBER_CODE_START - 1)
+  return String(maxCode + 1)
+}
+
+// Asigna código a los miembros que no lo tienen o lo tienen inválido/repetido (conserva el primero)
+function ensureMemberCodes(): boolean {
+  const usedCodes = new Set<string>()
+  const needsCode: Member[] = []
+  let changed = false
+
+  for (const member of data.members) {
+    const code = typeof member.code === 'string' ? normalizeMemberCode(member.code) : ''
+    if (MEMBER_CODE_PATTERN.test(code) && !usedCodes.has(code)) {
+      if (code !== member.code) {
+        member.code = code
+        changed = true
+      }
+      usedCodes.add(code)
+    } else {
+      member.code = ''
+      needsCode.push(member)
+    }
+  }
+
+  for (const member of needsCode) {
+    member.code = getNextMemberCode()
+    changed = true
+  }
+
+  return changed
+}
+
+// Agrega solo los elementos cuyo id no existe todavía, para que importar dos veces no duplique
+function mergeById<T extends { id: string }>(existing: T[], incoming: T[] | undefined): T[] {
+  if (!Array.isArray(incoming)) return existing
+  const ids = new Set(existing.map(item => item.id))
+  const merged = [...existing]
+  for (const item of incoming) {
+    if (!isRecord(item) || typeof item.id !== 'string' || ids.has(item.id)) continue
+    ids.add(item.id)
+    merged.push(item)
+  }
+  return merged
 }
 
 function getLocalDateString(date: Date): string {
@@ -98,6 +257,10 @@ function isMembershipExpired(member: Member): boolean {
 function findMemberByCode(code: string): Member | null | 'ambiguous' {
   const normalized = code.trim()
   if (!normalized) return null
+
+  const memberCode = normalizeMemberCode(normalized)
+  const byCode = data.members.find(m => m.code === memberCode)
+  if (byCode) return byCode
 
   const byId = data.members.find(m => m.id === normalized)
   if (byId) return byId
@@ -237,10 +400,11 @@ app.whenReady().then(() => {
 
   ipcMain.handle('get-data', () => data)
 
-  ipcMain.handle('add-member', (_event, member: Omit<Member, 'id' | 'createdAt'>) => {
+  ipcMain.handle('add-member', (_event, member: Omit<Member, 'id' | 'code' | 'createdAt'>) => {
     const newMember: Member = {
       ...member,
       id: generateId(),
+      code: getNextMemberCode(),
       createdAt: new Date().toISOString()
     }
     data.members.push(newMember)
@@ -251,7 +415,9 @@ app.whenReady().then(() => {
   ipcMain.handle('update-member', (_event, id: string, updates: Partial<Member>) => {
     const index = data.members.findIndex(m => m.id === id)
     if (index !== -1) {
-      data.members[index] = { ...data.members[index], ...updates }
+      const current = data.members[index]
+      // El id y el código no se cambian desde el formulario
+      data.members[index] = { ...current, ...updates, id: current.id, code: current.code }
       saveData()
     }
   })
@@ -368,31 +534,15 @@ app.whenReady().then(() => {
   })
 
   ipcMain.handle('import-data', (_event, importedData: Partial<AppData>) => {
-    if (importedData.members) {
-      data.members = [...data.members, ...importedData.members]
-    }
-    if (importedData.memberships) {
-      data.memberships = [...data.memberships, ...importedData.memberships]
-    }
-    if (importedData.products) {
-      data.products = [...data.products, ...importedData.products]
-    }
-    if (importedData.sales) {
-      data.sales = [...data.sales, ...importedData.sales]
-    }
-    if (importedData.entries) {
-      data.entries = [...data.entries, ...importedData.entries]
-    }
-    if (importedData.membershipSales) {
-      data.membershipSales = [...data.membershipSales, ...importedData.membershipSales]
-    }
-    if (importedData.attendances) {
-      const existingIds = new Set(data.attendances.map(a => a.id))
-      data.attendances = [
-        ...data.attendances,
-        ...importedData.attendances.filter(a => !existingIds.has(a.id))
-      ]
-    }
+    if (!isRecord(importedData)) return data
+    data.members = mergeById(data.members, importedData.members)
+    data.memberships = mergeById(data.memberships, importedData.memberships)
+    data.products = mergeById(data.products, importedData.products)
+    data.sales = mergeById(data.sales, importedData.sales)
+    data.entries = mergeById(data.entries, importedData.entries)
+    data.membershipSales = mergeById(data.membershipSales, importedData.membershipSales)
+    data.attendances = mergeById(data.attendances, importedData.attendances)
+    ensureMemberCodes()
     saveData()
     return data
   })
@@ -415,6 +565,7 @@ app.whenReady().then(() => {
       if (csvData.type === 'members') {
         const member: Member = {
           id: generateId(),
+          code: normalizeMemberCode(record.code || ''),
           name: record.name || '',
           phone: record.phone || '',
           email: record.email || '',
@@ -449,6 +600,7 @@ app.whenReady().then(() => {
       }
     }
 
+    ensureMemberCodes()
     saveData()
     return data
   })
@@ -487,6 +639,19 @@ app.whenReady().then(() => {
   })
 
   createWindow()
+
+  if (loadWarning && mainWindow) {
+    const warning = loadWarning
+    const targetWindow = mainWindow
+    targetWindow.once('ready-to-show', () => {
+      dialog.showMessageBox(targetWindow, {
+        type: 'warning',
+        title: 'Problema con los datos',
+        message: 'Problema al cargar los datos',
+        detail: warning
+      })
+    })
+  }
 
   app.on('activate', function () {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()

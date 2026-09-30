@@ -2,6 +2,8 @@
 
 export interface Member {
   id: string
+  // Código corto (numérico) para el check-in y la credencial con código de barras
+  code: string
   name: string
   phone: string
   email: string
