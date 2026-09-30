@@ -81,6 +81,16 @@ export interface Attendance {
   timestamp: string
 }
 
+export type AddSaleResult =
+  | { ok: true; sale: Sale }
+  | { ok: false; error: string }
+
+export interface ImportSummary {
+  data: AppData
+  added: number
+  skipped: number
+}
+
 export type CheckInResult =
   | { status: 'not_found' }
   | { status: 'ambiguous' }
