@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { AppData, Member } from '../types'
 import { Table, Button, Modal, Input, Select, Badge } from './UI'
 import { ColumnDef } from '@tanstack/react-table'
+import { toLocalDateString, addDaysToDateString, isValidDateString, getMemberStatus } from '../utils/dates'
 
 interface MembersProps {
   data: AppData
@@ -17,7 +18,7 @@ export function Members({ data, updateData }: MembersProps) {
     phone: '',
     email: '',
     membershipId: '',
-    startDate: new Date().toISOString().split('T')[0]
+    startDate: toLocalDateString()
   })
 
   const filteredMembers = data.members.filter(m =>
@@ -36,10 +37,11 @@ export function Members({ data, updateData }: MembersProps) {
     },
     { accessorKey: 'endDate', header: 'Expira' },
     {
-      accessorKey: 'status',
+      id: 'status',
+      accessorFn: member => getMemberStatus(member),
       header: 'Estado',
       cell: info => {
-        const status = info.getValue() as string
+        const status = info.getValue() as Member['status']
         const variant = status === 'active' ? 'success' : status === 'expired' ? 'danger' : 'warning'
         const label = status === 'active' ? 'Activo' : status === 'expired' ? 'Expirado' : 'Congelado'
         return <Badge variant={variant}>{label}</Badge>
@@ -64,10 +66,8 @@ export function Members({ data, updateData }: MembersProps) {
 
   const getEndDate = (startDate: string, membershipId: string) => {
     const membership = data.memberships.find(m => m.id === membershipId)
-    if (!membership) return ''
-    const start = new Date(startDate)
-    start.setDate(start.getDate() + membership.durationDays)
-    return start.toISOString().split('T')[0]
+    if (!membership || !isValidDateString(startDate)) return ''
+    return addDaysToDateString(startDate, membership.durationDays)
   }
 
   const handleSubmit = async () => {
@@ -76,7 +76,9 @@ export function Members({ data, updateData }: MembersProps) {
     const endDate = getEndDate(form.startDate, form.membershipId)
 
     if (editingMember) {
-      await window.api.updateMember(editingMember.id, { ...form, endDate })
+      // Al guardar con fechas recalculadas se renueva el estado; la vigencia la decide endDate
+      const status = editingMember.status === 'frozen' ? 'frozen' : 'active'
+      await window.api.updateMember(editingMember.id, { ...form, endDate, status })
     } else {
       await window.api.addMember({ ...form, endDate, status: 'active' })
     }
@@ -85,7 +87,7 @@ export function Members({ data, updateData }: MembersProps) {
     updateData(newData)
     setShowModal(false)
     setEditingMember(null)
-    setForm({ name: '', phone: '', email: '', membershipId: '', startDate: new Date().toISOString().split('T')[0] })
+    setForm({ name: '', phone: '', email: '', membershipId: '', startDate: toLocalDateString() })
   }
 
   const handleEdit = (member: Member) => {

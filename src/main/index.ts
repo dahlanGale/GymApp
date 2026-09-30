@@ -514,7 +514,7 @@ app.whenReady().then(() => {
           phone: record.phone || '',
           email: record.email || '',
           membershipId: record.membershipid || '',
-          startDate: record.startdate || new Date().toISOString().split('T')[0],
+          startDate: record.startdate || getLocalDateString(new Date()),
           endDate: record.enddate || '',
           status: (record.status as 'active' | 'expired' | 'frozen') || 'active',
           createdAt: new Date().toISOString()
