@@ -17,6 +17,8 @@ const api = {
     ipcRenderer.invoke('add-member', member),
   updateMember: (id: string, member: Partial<Member>): Promise<void> =>
     ipcRenderer.invoke('update-member', id, member),
+  freezeMember: (id: string): Promise<Member | null> => ipcRenderer.invoke('freeze-member', id),
+  unfreezeMember: (id: string): Promise<Member | null> => ipcRenderer.invoke('unfreeze-member', id),
   deleteMember: (id: string): Promise<void> => ipcRenderer.invoke('delete-member', id),
   addMembership: (membership: Omit<Membership, 'id'>): Promise<Membership> =>
     ipcRenderer.invoke('add-membership', membership),
