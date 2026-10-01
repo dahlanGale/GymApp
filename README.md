@@ -101,6 +101,20 @@ npm run build:win
 
 El ejecutable se generará en la carpeta `release/`.
 
+### Generar Instalador para macOS
+
+Desde una Mac, para crear los instaladores `.dmg` (Apple Silicon e Intel):
+
+```bash
+npm run build:mac
+```
+
+Los instaladores se generan en la carpeta `release/`. La app no está firmada con un certificado de Apple, así que la primera vez hay que abrirla con clic derecho → **Abrir**.
+
+### Instaladores desde GitHub
+
+En cada PR, el CI genera la app para Windows y macOS. Los instaladores se pueden descargar durante 7 días desde la ejecución del workflow **CI** en la pestaña **Actions**, en la sección **Artifacts**.
+
 ### Vista Previa
 
 Para previsualizar la aplicación compilada:
@@ -150,6 +164,7 @@ gymapp/
 | `npm run dev` | Inicia la aplicación en modo desarrollo |
 | `npm run build` | Compila el código fuente |
 | `npm run build:win` | Genera ejecutable portable para Windows |
+| `npm run build:mac` | Genera instaladores `.dmg` para macOS (Apple Silicon e Intel) |
 | `npm run preview` | Previsualiza la aplicación compilada |
 
 ## Configuración
