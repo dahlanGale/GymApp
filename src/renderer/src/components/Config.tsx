@@ -1,11 +1,38 @@
 import { useState } from 'react'
-import { AppData, BusinessConfig } from '../types'
+import { AppData, BusinessConfig, ImportSummary } from '../types'
 import { Button, Card, Input } from './UI'
 import { toLocalDateString } from '../utils/dates'
 
 interface ConfigProps {
   data: AppData
   updateData: (d: AppData) => void
+}
+
+const MAX_WARNINGS_SHOWN = 8
+
+function formatCsvImportSummary(summary: ImportSummary, importType: 'members' | 'products' | 'memberships'): string {
+  if (summary.error) return `No se importó nada. ${summary.error}`
+
+  const label = importType === 'members' ? 'miembros' : importType === 'products' ? 'productos' : 'membresías'
+  const duplicates = summary.duplicates ?? 0
+  const withoutName = summary.skipped - duplicates
+  const lines = [
+    summary.added > 0
+      ? `Se importaron ${summary.added} ${label}.`
+      : `No se importaron ${label}.`
+  ]
+  if (duplicates > 0) lines.push(`${duplicates} omitidos porque ya existían.`)
+  if (withoutName > 0) lines.push(`${withoutName} filas omitidas por no tener nombre.`)
+
+  const warnings = summary.warnings ?? []
+  if (warnings.length > 0) {
+    lines.push('', 'Revise estos valores:')
+    lines.push(...warnings.slice(0, MAX_WARNINGS_SHOWN))
+    if (warnings.length > MAX_WARNINGS_SHOWN) {
+      lines.push(`…y ${warnings.length - MAX_WARNINGS_SHOWN} avisos más.`)
+    }
+  }
+  return lines.join('\n')
 }
 
 export function Config({ data, updateData }: ConfigProps) {
@@ -69,13 +96,7 @@ export function Config({ data, updateData }: ConfigProps) {
       
       const summary = await window.api.importCsv({ type: importType, data: text })
       updateData(summary.data)
-      const label = importType === 'members' ? 'miembros' : importType === 'products' ? 'productos' : 'membresías'
-      if (summary.added === 0) {
-        alert(`No se importaron ${label}. Verifique que el archivo tenga encabezados y una columna "name".`)
-      } else {
-        alert(`Se importaron ${summary.added} ${label}` +
-          (summary.skipped > 0 ? `; ${summary.skipped} filas omitidas por no tener nombre.` : '.'))
-      }
+      alert(formatCsvImportSummary(summary, importType))
     } catch (error) {
       alert('Error al importar datos. Verifique el formato del archivo CSV.')
     } finally {

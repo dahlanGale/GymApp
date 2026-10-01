@@ -8,6 +8,7 @@ export type {
   MembershipSale,
   Attendance,
   CheckInResult,
+  ImportSummary,
   BusinessConfig,
   AppData
 } from '../../shared/types'
