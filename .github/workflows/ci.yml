@@ -25,3 +25,45 @@ jobs:
 
       - name: Revisar tipos
         run: npm run typecheck
+
+  # Genera la app en Windows y macOS para asegurar que compila y se empaqueta en ambos sistemas.
+  # Los instaladores quedan como artefactos descargables de la ejecución durante 7 días.
+  package:
+    needs: typecheck
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            script: build:win
+            artifact: GymPOS-windows
+          - os: macos-latest
+            script: build:mac
+            artifact: GymPOS-macos
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Generar la app
+        run: npm run ${{ matrix.script }} -- --publish never
+        env:
+          # Sin certificado de Apple: se firma ad-hoc (identity "-") en lugar de buscar uno en el llavero
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+
+      - name: Subir instalador
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: |
+            release/*.exe
+            release/*.dmg
+          if-no-files-found: error
+          retention-days: 7
