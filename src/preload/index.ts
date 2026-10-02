@@ -44,11 +44,12 @@ const api = {
   importCsv: (csvData: { type: 'members' | 'products' | 'memberships', data: string }): Promise<ImportSummary> =>
     ipcRenderer.invoke('import-csv', csvData),
   openWindow: (kind: SecondaryWindow): Promise<void> => ipcRenderer.invoke('open-window', kind),
-  onAttendanceRecorded: (callback: () => void): (() => void) => {
+  // Se dispara cada vez que el proceso main guarda datos (check-ins del kiosco o de Recepción incluidos)
+  onDataChanged: (callback: () => void): (() => void) => {
     const listener = (): void => callback()
-    ipcRenderer.on('attendance-recorded', listener)
+    ipcRenderer.on('data-changed', listener)
     return () => {
-      ipcRenderer.removeListener('attendance-recorded', listener)
+      ipcRenderer.removeListener('data-changed', listener)
     }
   }
 }

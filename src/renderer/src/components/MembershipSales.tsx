@@ -3,6 +3,7 @@ import { AppData, MembershipSale } from '../types'
 import { Table, Button, Modal, Input, Badge, Card, StatCard, Select } from './UI'
 import { ColumnDef } from '@tanstack/react-table'
 import { toLocalDateString, addDaysToDateString, daysUntil, isValidDateString, getMemberStatus } from '../utils/dates'
+import { formatMoney } from '../utils/format'
 
 interface MembershipSalesProps {
   data: AppData
@@ -52,7 +53,7 @@ export function MembershipSales({ data, updateData }: MembershipSalesProps) {
     {
       accessorKey: 'price',
       header: 'Precio',
-      cell: info => `$${(info.getValue() as number).toFixed(2)}`,
+      cell: info => formatMoney(info.getValue() as number),
     },
     { accessorKey: 'expirationDate', header: 'Vencimiento' },
     {
@@ -137,7 +138,7 @@ export function MembershipSales({ data, updateData }: MembershipSalesProps) {
       <div className="p-6">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
           <StatCard title="Total Ventas de Membresías" value={data.membershipSales.length} />
-          <StatCard title="Ingresos por Membresías" value={`$${data.membershipSales.reduce((sum, s) => sum + s.price, 0).toFixed(2)}`} variant="primary" />
+          <StatCard title="Ingresos por Membresías" value={formatMoney(data.membershipSales.reduce((sum, s) => sum + s.price, 0))} variant="primary" />
         </div>
         <div className="flex justify-end mb-6">
           <Button onClick={() => setShowModal(true)}>
@@ -238,12 +239,12 @@ export function MembershipSales({ data, updateData }: MembershipSalesProps) {
                     {membership.hasPromotion ? (
                       <>
                         <span className="line-through text-sm text-gray-400 mr-2">
-                          ${membership.price.toFixed(2)}
+                          {formatMoney(membership.price)}
                         </span>
-                        <span className="text-blue-600">${finalPrice.toFixed(2)}</span>
+                        <span className="text-blue-600">{formatMoney(finalPrice)}</span>
                       </>
                     ) : (
-                      `$${membership.price.toFixed(2)}`
+                      formatMoney(membership.price)
                     )}
                   </span>
                 </div>

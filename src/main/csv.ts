@@ -1,5 +1,6 @@
 import type { Member, Membership } from '../shared/types'
 import { isRealDate, normalizeDateString } from '../shared/dates'
+import { normalizeText } from '../shared/text'
 
 export type CsvDelimiter = ',' | ';'
 
@@ -21,7 +22,7 @@ function detectCsvDelimiter(text: string): CsvDelimiter {
 // RFC 4180: un campo que EMPIEZA con comillas puede contener delimitadores, saltos de línea y comillas escapadas ("").
 // Una comilla en medio de un campo sin comillas (p. ej. Mancuerna 10") se toma como texto normal.
 export function parseCsv(text: string): ParsedCsv {
-  const input = text.replace(/^﻿/, '')
+  const input = text.replace(/^\uFEFF/, '')
   const delimiter = detectCsvDelimiter(input)
   const rows: string[][] = []
   let row: string[] = []
@@ -73,11 +74,7 @@ export function parseCsv(text: string): ParsedCsv {
 }
 
 function normalizeKey(value: string): string {
-  return value
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
-    .toLowerCase()
-    .replace(/[\s_\-.]/g, '')
+  return normalizeText(value).replace(/[\s_\-.]/g, '')
 }
 
 // Encabezados aceptados (en inglés y español) para cada campo

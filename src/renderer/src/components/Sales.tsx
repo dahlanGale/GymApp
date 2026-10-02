@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { AppData, Product } from '../types'
 import { getMemberStatus } from '../utils/dates'
+import { formatMoney } from '../utils/format'
 
 interface CartItem {
   productId: string
@@ -120,7 +121,7 @@ export function Sales({ data, updateData }: SalesProps) {
                 >
                   <h4 className="font-medium text-gray-900 truncate">{product.name}</h4>
                   <div className="text-sm text-gray-500">{product.category}</div>
-                  <div className="text-lg font-semibold text-gray-900 mt-1">${product.price.toFixed(2)}</div>
+                  <div className="text-lg font-semibold text-gray-900 mt-1">{formatMoney(product.price)}</div>
                   <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 4 }}>
                     Stock: {product.stock}
                   </div>
@@ -157,7 +158,7 @@ export function Sales({ data, updateData }: SalesProps) {
                   <div key={item.productId} className="flex items-center justify-between py-3 border-b border-gray-100 last:border-0">
                     <div className="flex-1">
                       <h4 className="font-medium text-gray-900">{item.productName}</h4>
-                      <span className="text-sm text-gray-500">${item.price.toFixed(2)} c/u</span>
+                      <span className="text-sm text-gray-500">{formatMoney(item.price)} c/u</span>
                     </div>
                     <div className="flex items-center gap-2">
                       <button 
@@ -181,7 +182,7 @@ export function Sales({ data, updateData }: SalesProps) {
             <div className="p-4 border-t border-gray-200">
               <div className="flex justify-between items-center text-lg font-semibold mb-4">
                 <span>Total:</span>
-                <span>${cartTotal.toFixed(2)}</span>
+                <span>{formatMoney(cartTotal)}</span>
               </div>
               <div className="flex gap-3">
                 <button 

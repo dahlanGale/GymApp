@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { CheckInFeedbackType, getFeedbackFromResult } from '../utils/checkInFeedback'
+import { CHECK_IN_FEEDBACK_COLORS, CheckInFeedbackType, getFeedbackFromResult } from '../utils/checkInFeedback'
 
 type FeedbackType = CheckInFeedbackType | null
 
@@ -73,19 +73,6 @@ export function CheckIn({ standalone = false }: CheckInProps) {
 
   const loading = pendingCount > 0
 
-  const getFeedbackColor = () => {
-    switch (feedback) {
-      case 'success':
-        return 'bg-green-100 border-green-500 text-green-800'
-      case 'error':
-        return 'bg-red-100 border-red-500 text-red-800'
-      case 'warning':
-        return 'bg-yellow-100 border-yellow-500 text-yellow-800'
-      default:
-        return 'bg-gray-50 border-gray-300 text-gray-600'
-    }
-  }
-
   return (
     <div className={`${standalone ? 'min-h-screen' : ''} flex items-center justify-center bg-gray-50 p-8`}>
       <div className="w-full max-w-md">
@@ -119,7 +106,7 @@ export function CheckIn({ standalone = false }: CheckInProps) {
           </div>
 
           {feedback && (
-            <div className={`mt-6 p-4 rounded-lg border-2 ${getFeedbackColor()} transition-all`}>
+            <div className={`mt-6 p-4 rounded-lg border-2 ${CHECK_IN_FEEDBACK_COLORS[feedback]} transition-all`}>
               <p className="text-center text-lg font-semibold">{message}</p>
             </div>
           )}

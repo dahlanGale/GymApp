@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { AppData, Product } from '../types'
 import { Table, Button, Modal, Input } from './UI'
 import { ColumnDef } from '@tanstack/react-table'
+import { formatMoney } from '../utils/format'
 
 interface ProductsProps {
   data: AppData
@@ -19,7 +20,7 @@ export function Products({ data, updateData }: ProductsProps) {
     {
       accessorKey: 'price',
       header: 'Precio',
-      cell: info => `$${(info.getValue() as number).toFixed(2)}`,
+      cell: info => formatMoney(info.getValue() as number),
     },
     { accessorKey: 'stock', header: 'Stock' },
     {

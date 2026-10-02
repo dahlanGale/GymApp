@@ -9,41 +9,47 @@ GymPOS es una aplicación de escritorio completa diseñada para gimnasios que ne
 ## Características Principales
 
 ### Dashboard
-- Resumen de ventas del día (ingresos totales, número de transacciones)
-- Contador de miembros activos
-- Tarjetas de estadísticas rápidas
-- Lista de transacciones recientes
+- Ventas y transacciones del día, miembros activos y total de miembros
+- Ventas recientes y calendario de vencimientos del mes
+- **Asistencia Semanal**: tabla por persona y por día (lunes a domingo) con la hora de entrada, cuántas personas vinieron cada día y cuántos días vino cada persona; se puede navegar entre semanas
 
-### Gestión de Miembros
-- Lista completa de miembros con búsqueda y filtros
-- Agregar nuevos miembros (nombre, teléfono, email, tipo de membresía, fecha de inicio)
-- Editar detalles de miembros
-- Ver historial de cada miembro
-- Estados: Activo, Expirado, Congelado
+### Miembros
+- Cada miembro tiene un **código** numérico (desde 1001) para el check-in
+- Búsqueda por nombre, código, teléfono o email (sin importar acentos ni mayúsculas)
+- Estado calculado por la fecha de vencimiento: Activo, Expirado o Congelado
+- **Credencial** imprimible con código de barras (Code 39) que se puede escanear en el check-in
+- **Historial** por miembro: asistencias, membresías compradas y compras de productos
+- **Congelar / Descongelar**: al descongelar, el vencimiento se recorre los días que estuvo congelado
 
-### Membresías
-- Tipos de membresía predefinidos (Mensual, Trimestral, Anual)
-- Configuración de precios por tipo
-- Definición de duración en días
+### Membresías y Venta de Membresías
+- Tipos de membresía con precio, duración en días y promociones
+- Venta de membresías a uno o varios miembros (por ejemplo, pareja), que renueva su vencimiento
 
-### Productos
-- Catálogo de productos del gimnasio (suplementos, accesorios)
-- Agregar/Editar/Eliminar productos
-- Gestión de precios y cantidades en stock
-- Categorías de productos
+### Productos, Ventas e Inventario
+- Catálogo de productos con categoría, precio y stock
+- Punto de venta en efectivo o tarjeta; no deja vender más unidades de las que hay en stock
+- **Historial de Ventas** por día: productos, membresías, total y lo cobrado en efectivo
+- Entradas de inventario que suman al stock
 
-### Ventas/POS
-- Búsqueda rápida de miembros (para renovación de membresías)
-- Selección de productos
-- Cálculo automático de totales
-- Procesamiento de ventas (efectivo, tarjeta)
-- Impresión de recibos (opcional)
-- Historial de ventas diarias
+### Check-In y Asistencias
+La app tiene dos ventanas que corren en paralelo al sistema y se abren desde el menú lateral (**Ventanas**) o desde el menú **Ventana**:
+
+- **Check-In (kiosco)**: para los miembros. Escanean su credencial o escriben su código, teléfono o email y la app los deja pasar o les dice por qué no. No muestra datos de otros miembros ni permite abrir otras ventanas.
+- **Recepción**: para el personal. Busca a cualquier miembro, registra su entrada con un clic (o Enter con el código) y muestra en vivo las entradas del día.
+
+Las dos ventanas aplican las mismas reglas: no entran miembros congelados ni con la membresía vencida, y una entrada repetida dentro de 2 minutos no se vuelve a registrar. Todo lo que registran aparece al momento en la Recepción, en la página **Asistencias** y en el Dashboard.
+
+### Importar y Exportar (Configuración)
+- **Exportar** un respaldo completo en JSON e **importarlo** después: solo se agregan los registros que todavía no existen, así que importar el mismo respaldo dos veces no duplica nada.
+- **Importar CSV** de miembros, productos o membresías:
+  - Acepta archivos de Excel en español: separador `;` o `,`, números como `1.300,50` o `1,300.50`, fechas `AAAA-MM-DD` o `DD/MM/AAAA` y valores `VERDADERO`/`sí`.
+  - Encabezados en inglés o en español (`name`/`nombre`, `phone`/`teléfono`, `enddate`/`vencimiento`, `price`/`precio`…).
+  - Omite los registros que ya existen y muestra avisos de los valores que no pudo interpretar.
 
 ### Almacenamiento de Datos
-- Almacenamiento local en archivos JSON
-- Ubicado en el directorio de datos del usuario
-- Persistencia de datos entre sesiones
+- Los datos se guardan en `gym-pos-data.json`, dentro de la carpeta de datos de la app en el directorio del usuario (en Mac, dentro de `~/Library/Application Support/`; en Windows, dentro de `%APPDATA%`). La ruta exacta queda en el registro de la app al iniciar.
+- Cada guardado escribe primero un archivo temporal y luego lo reemplaza, para que un apagón no deje el archivo a medias. La versión anterior queda en `gym-pos-data.json.bak`.
+- Si al abrir la app el archivo está dañado, se mueve a `gym-pos-data.corrupt-<fecha>.json`, se restaura el `.bak` y aparece un aviso.
 
 ## Stack Tecnológico
 
@@ -57,7 +63,7 @@ GymPOS es una aplicación de escritorio completa diseñada para gimnasios que ne
 
 ## Requisitos Previos
 
-- Node.js (versión 18 o superior recomendada)
+- Node.js 22 (la versión que usa el CI)
 - npm (viene incluido con Node.js)
 
 ## Instalación
@@ -109,7 +115,23 @@ Desde una Mac, para crear los instaladores `.dmg` (Apple Silicon e Intel):
 npm run build:mac
 ```
 
-Los instaladores se generan en la carpeta `release/`. La app no está firmada con un certificado de Apple, así que la primera vez hay que abrirla con clic derecho → **Abrir**.
+Los instaladores se generan en la carpeta `release/`.
+
+#### Abrir la app en macOS por primera vez
+
+La app no está firmada ni notarizada con un certificado de Apple, así que macOS avisa que no pudo comprobar que no tenga software malicioso. Desde macOS Sequoia (15) ya no funciona el clic derecho → **Abrir**; hay que desbloquearla así:
+
+1. Copia GymPOS a **Aplicaciones**, intenta abrirla y pulsa **Listo** en el aviso.
+2. Ve a **Ajustes del Sistema → Privacidad y seguridad** y, en la sección **Seguridad**, pulsa **Abrir igualmente** junto al mensaje de GymPOS. Confirma con tu contraseña o Touch ID.
+3. Vuelve a abrir la app y elige **Abrir igualmente**.
+
+El botón solo aparece un rato después del intento; si no lo ves, repite el paso 1. También se puede quitar la marca de descarga desde la Terminal:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/GymPOS.app
+```
+
+Para que abra sin avisos hace falta firmarla con un certificado **Developer ID** y notarizarla (Apple Developer Program).
 
 ### Instaladores desde GitHub
 
@@ -127,10 +149,12 @@ npm run preview
 
 ```
 gymapp/
+├── .github/workflows/ # CI: revisión de tipos y empaquetado para Windows y macOS
 ├── src/
-│   ├── main/          # Proceso principal de Electron
-│   ├── preload/       # Scripts de preload
-│   └── renderer/      # Aplicación React (UI)
+│   ├── main/          # Proceso principal de Electron (datos, ventanas, importación CSV)
+│   ├── preload/       # Preloads: ventana principal, kiosco de Check-In y Recepción
+│   ├── renderer/      # Aplicación React (UI) de las tres ventanas
+│   └── shared/        # Tipos y utilidades usados por main, preload y renderer
 ├── out/               # Código compilado
 ├── release/           # Ejecutables generados
 ├── package.json       # Dependencias y scripts
@@ -166,10 +190,11 @@ gymapp/
 | `npm run build:win` | Genera ejecutable portable para Windows |
 | `npm run build:mac` | Genera instaladores `.dmg` para macOS (Apple Silicon e Intel) |
 | `npm run preview` | Previsualiza la aplicación compilada |
+| `npm run typecheck` | Revisa los tipos de TypeScript (lo mismo que corre el CI) |
 
 ## Configuración
 
-La aplicación almacena sus datos localmente en archivos JSON ubicados en el directorio de datos del usuario. No requiere configuración adicional para comenzar a usarla.
+No requiere configuración adicional para comenzar a usarla. Los datos del gimnasio (nombre, dirección, teléfono, email y costo de mantenimiento anual) se editan en **Configuración**.
 
 ## Licencia
 

@@ -4,6 +4,7 @@ import { Table, Button, Modal, Input, Select, Badge } from './UI'
 import { ColumnDef } from '@tanstack/react-table'
 import { MemberCredential } from './MemberCredential'
 import { MemberHistory } from './MemberHistory'
+import { MEMBER_STATUS_DISPLAY } from '../utils/memberStatus'
 import { toLocalDateString, addDaysToDateString, isValidDateString, getMemberStatus } from '../utils/dates'
 
 interface MembersProps {
@@ -36,20 +37,19 @@ export function Members({ data, updateData }: MembersProps) {
     { accessorKey: 'phone', header: 'Teléfono' },
     { accessorKey: 'email', header: 'Email' },
     {
-      accessorKey: 'membershipId',
+      // Se busca y ordena por el nombre que se muestra, no por el id interno
+      id: 'membership',
+      accessorFn: member => getMembershipName(member.membershipId),
       header: 'Membresía',
-      cell: info => getMembershipName(info.getValue() as string),
     },
     { accessorKey: 'endDate', header: 'Expira' },
     {
       id: 'status',
-      accessorFn: member => getMemberStatus(member),
+      accessorFn: member => MEMBER_STATUS_DISPLAY[getMemberStatus(member)].label,
       header: 'Estado',
-      cell: info => {
-        const status = info.getValue() as Member['status']
-        const variant = status === 'active' ? 'success' : status === 'expired' ? 'danger' : 'warning'
-        const label = status === 'active' ? 'Activo' : status === 'expired' ? 'Expirado' : 'Congelado'
-        return <Badge variant={variant}>{label}</Badge>
+      cell: ({ row }) => {
+        const status = MEMBER_STATUS_DISPLAY[getMemberStatus(row.original)]
+        return <Badge variant={status.variant}>{status.label}</Badge>
       },
     },
     {
