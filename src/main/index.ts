@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, Menu } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, Menu, MenuItemConstructorOptions } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import log from 'electron-log/main'
@@ -308,13 +308,37 @@ function createWindow(): void {
     }
   })
 
-  const menu = Menu.buildFromTemplate([
-    {
-      label: 'Archivo',
-      submenu: [
-        { role: 'quit' }
+  const isMac = process.platform === 'darwin'
+
+  // En macOS el primer menú siempre lleva el nombre de la app (Acerca de, Ocultar, Salir con ⌘Q).
+  // Además, sin un menú Edición los atajos ⌘C/⌘V/⌘A no funcionan en los campos de texto.
+  const platformMenus: MenuItemConstructorOptions[] = isMac
+    ? [
+        { role: 'appMenu' },
+        {
+          label: 'Edición',
+          submenu: [
+            { role: 'undo', label: 'Deshacer' },
+            { role: 'redo', label: 'Rehacer' },
+            { type: 'separator' },
+            { role: 'cut', label: 'Cortar' },
+            { role: 'copy', label: 'Copiar' },
+            { role: 'paste', label: 'Pegar' },
+            { role: 'selectAll', label: 'Seleccionar todo' }
+          ]
+        }
       ]
-    },
+    : [
+        {
+          label: 'Archivo',
+          submenu: [
+            { role: 'quit' }
+          ]
+        }
+      ]
+
+  const menu = Menu.buildFromTemplate([
+    ...platformMenus,
     {
       label: 'Ver',
       submenu: [
@@ -342,6 +366,10 @@ function createWindow(): void {
     }
   ])
   Menu.setApplicationMenu(menu)
+
+  mainWindow.on('closed', () => {
+    mainWindow = null
+  })
 
   mainWindow.on('ready-to-show', () => {
     mainWindow?.show()
@@ -822,8 +850,10 @@ app.whenReady().then(() => {
     })
   }
 
+  // En macOS la app sigue abierta al cerrar la ventana principal; el ícono del Dock la vuelve a abrir
+  // aunque la ventana de Check-In siga abierta
   app.on('activate', function () {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow()
+    if (!mainWindow) createWindow()
   })
 })
 

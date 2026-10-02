@@ -7,6 +7,7 @@
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "build:win": "npm run build && electron-builder --win",
+    "build:mac": "npm run build && electron-builder --mac",
     "preview": "electron-vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
@@ -19,8 +20,20 @@
       "output": "release"
     },
     "win": {
-      "target": "portable",
-      "icon": "build/icon.ico"
+      "target": "portable"
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
+      ],
+      "category": "public.app-category.business",
+      "identity": "-"
     }
   },
   "devDependencies": {
