@@ -9,11 +9,12 @@ interface LayoutProps {
 export function Layout({ page, setPage, children }: LayoutProps) {
   return (
     <div className="flex min-h-screen">
-      <aside className="w-60 bg-slate-800 text-white flex flex-col py-4">
+      {/* Fijo a la altura de la ventana, para que los botones de Ventanas siempre estén visibles */}
+      <aside className="w-60 shrink-0 bg-slate-800 text-white flex flex-col py-4 sticky top-0 h-screen self-start">
         <div className="px-4 pb-6 border-b border-white/10 mb-4">
           <h1 className="text-xl font-bold text-emerald-500">GymPOS</h1>
         </div>
-        <nav className="flex-1">
+        <nav className="flex-1 overflow-y-auto">
           <NavItem 
             active={page === 'dashboard'} 
             onClick={() => setPage('dashboard')}
@@ -102,7 +103,7 @@ export function Layout({ page, setPage, children }: LayoutProps) {
           </button>
         </div>
       </aside>
-      <main className="flex-1 flex flex-col">
+      <main className="flex-1 flex flex-col min-w-0">
         {children}
       </main>
     </div>

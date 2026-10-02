@@ -2,19 +2,13 @@ import { ColumnDef } from '@tanstack/react-table'
 import { AppData, Attendance, Member, MembershipSale, Sale } from '../types'
 import { Badge, Modal, Table } from './UI'
 import { getMemberStatus } from '../utils/dates'
+import { formatMoney } from '../utils/format'
+import { MEMBER_STATUS_DISPLAY } from '../utils/memberStatus'
 
 interface MemberHistoryProps {
   member: Member | null
   data: AppData
   onClose: () => void
-}
-
-const formatMoney = (value: number) => `$${value.toFixed(2)}`
-
-const STATUS_BADGES: Record<Member['status'], { variant: 'success' | 'danger' | 'warning'; label: string }> = {
-  active: { variant: 'success', label: 'Activo' },
-  expired: { variant: 'danger', label: 'Expirado' },
-  frozen: { variant: 'warning', label: 'Congelado' },
 }
 
 // La búsqueda filtra sobre el valor de la columna, así que se usa la fecha como se muestra;
@@ -81,7 +75,7 @@ export function MemberHistory({ member, data, onClose }: MemberHistoryProps) {
     .sort((a, b) => b.date.localeCompare(a.date))
 
   const membershipName = data.memberships.find(m => m.id === member.membershipId)?.name ?? 'Sin membresía'
-  const status = STATUS_BADGES[getMemberStatus(member)]
+  const status = MEMBER_STATUS_DISPLAY[getMemberStatus(member)]
   const lastAttendance = attendances[0] ? new Date(attendances[0].timestamp).toLocaleString() : 'Nunca'
   const purchasesTotal = purchases.reduce((sum, s) => sum + s.total, 0)
 

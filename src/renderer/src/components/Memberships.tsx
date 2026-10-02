@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { AppData, Membership } from '../types'
 import { Table, Button, Modal, Input, Badge, Select } from './UI'
 import { ColumnDef } from '@tanstack/react-table'
+import { formatMoney } from '../utils/format'
 
 interface MembershipsProps {
   data: AppData
@@ -78,7 +79,7 @@ export function Memberships({ data, updateData }: MembershipsProps) {
     {
       accessorKey: 'price',
       header: 'Precio',
-      cell: info => `$${(info.getValue() as number).toFixed(2)}`,
+      cell: info => formatMoney(info.getValue() as number),
     },
     {
       accessorKey: 'durationDays',
@@ -200,7 +201,7 @@ export function Memberships({ data, updateData }: MembershipsProps) {
                 <div className="p-3 bg-green-100 rounded-lg mt-2">
                   <div className="text-xs text-green-800 mb-1">Precio final con promoción:</div>
                   <div className="text-2xl font-bold text-green-800">
-                    ${Math.max(0, form.price - form.promotionDiscount).toFixed(2)}
+                    {formatMoney(Math.max(0, form.price - form.promotionDiscount))}
                   </div>
                 </div>
               )}
