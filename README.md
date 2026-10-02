@@ -97,15 +97,15 @@ Para compilar el código fuente:
 npm run build
 ```
 
-### Generar Ejecutable para Windows
+### Generar Instalador para Windows
 
-Para crear un ejecutable portable para Windows:
+Para crear el instalador de Windows (se instala para el usuario actual, sin pedir permisos de administrador):
 
 ```bash
 npm run build:win
 ```
 
-El ejecutable se generará en la carpeta `release/`.
+El instalador (`GymPOS Setup <versión>.exe`) se generará en la carpeta `release/`.
 
 ### Generar Instalador para macOS
 
@@ -135,7 +135,29 @@ Para que abra sin avisos hace falta firmarla con un certificado **Developer ID**
 
 ### Instaladores desde GitHub
 
-En cada PR, el CI genera la app para Windows y macOS. Los instaladores se pueden descargar durante 7 días desde la ejecución del workflow **CI** en la pestaña **Actions**, en la sección **Artifacts**.
+- **Versiones publicadas**: la página [Releases](https://github.com/dahlanGale/GymApp/releases) tiene los instaladores de cada versión para Windows y macOS.
+- **Versiones de prueba**: en cada PR, el CI genera la app para Windows y macOS. Los instaladores se pueden descargar durante 7 días desde la ejecución del workflow **CI** en la pestaña **Actions**, en la sección **Artifacts**.
+
+## Actualizaciones Automáticas
+
+La app revisa al abrir, y luego cada 4 horas, si hay una versión nueva publicada en Releases. Los datos del gimnasio no se tocan al actualizar.
+
+- **Windows**: descarga la versión nueva en segundo plano y la instala al cerrar la app, o al pulsar **Reiniciar y actualizar** en el aviso que aparece arriba.
+- **macOS**: muestra un aviso con el botón **Descargar**, que abre la página de la versión nueva. La actualización no se instala sola porque macOS lo impide en apps sin firma **Developer ID** de Apple.
+
+La versión instalada se ve abajo en el menú lateral.
+
+### Publicar una Versión Nueva
+
+1. Sube el número de versión en `package.json` (por ejemplo, de `1.1.0` a `1.2.0`) y fusiona ese cambio en `main`.
+2. Crea y sube la etiqueta con el mismo número:
+
+```bash
+git tag v1.2.0
+git push origin v1.2.0
+```
+
+El workflow **Release** genera los instaladores de Windows y macOS y los publica en Releases. Si la etiqueta no coincide con la versión de `package.json`, el workflow se detiene sin publicar nada.
 
 ### Vista Previa
 
@@ -149,7 +171,7 @@ npm run preview
 
 ```
 gymapp/
-├── .github/workflows/ # CI: revisión de tipos y empaquetado para Windows y macOS
+├── .github/workflows/ # CI (tipos y empaquetado en cada PR) y Release (publicar versiones)
 ├── src/
 │   ├── main/          # Proceso principal de Electron (datos, ventanas, importación CSV)
 │   ├── preload/       # Preloads: ventana principal, kiosco de Check-In y Recepción
@@ -187,7 +209,7 @@ gymapp/
 |--------|-------------|
 | `npm run dev` | Inicia la aplicación en modo desarrollo |
 | `npm run build` | Compila el código fuente |
-| `npm run build:win` | Genera ejecutable portable para Windows |
+| `npm run build:win` | Genera el instalador para Windows |
 | `npm run build:mac` | Genera instaladores `.dmg` para macOS (Apple Silicon e Intel) |
 | `npm run preview` | Previsualiza la aplicación compilada |
 | `npm run typecheck` | Revisa los tipos de TypeScript (lo mismo que corre el CI) |
