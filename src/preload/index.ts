@@ -12,6 +12,7 @@ import type {
   AppData,
   AddSaleResult,
   ImportSummary,
+  LinkNfcResult,
   SecondaryWindow,
   UpdateState
 } from '../shared/types'
@@ -24,6 +25,9 @@ const api = {
     ipcRenderer.invoke('update-member', id, member),
   freezeMember: (id: string): Promise<Member | null> => ipcRenderer.invoke('freeze-member', id),
   unfreezeMember: (id: string): Promise<Member | null> => ipcRenderer.invoke('unfreeze-member', id),
+  linkNfcTag: (memberId: string, tag: string): Promise<LinkNfcResult> =>
+    ipcRenderer.invoke('link-nfc-tag', memberId, tag),
+  unlinkNfcTag: (memberId: string): Promise<void> => ipcRenderer.invoke('unlink-nfc-tag', memberId),
   deleteMember: (id: string): Promise<void> => ipcRenderer.invoke('delete-member', id),
   addMembership: (membership: Omit<Membership, 'id'>): Promise<Membership> =>
     ipcRenderer.invoke('add-membership', membership),

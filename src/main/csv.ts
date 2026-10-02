@@ -81,6 +81,7 @@ function normalizeKey(value: string): string {
 const HEADER_ALIASES: Record<string, string[]> = {
   name: ['name', 'nombre', 'nombrecompleto'],
   code: ['code', 'codigo', 'codigomiembro'],
+  nfctag: ['nfctag', 'nfc', 'tarjeta', 'tarjetanfc', 'rfid', 'uid'],
   phone: ['phone', 'telefono', 'tel', 'celular'],
   email: ['email', 'correo', 'correoelectronico', 'mail'],
   membershipid: ['membershipid', 'membership', 'membresia', 'membresiaid', 'idmembresia'],

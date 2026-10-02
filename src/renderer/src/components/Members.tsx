@@ -4,6 +4,7 @@ import { Table, Button, Modal, Input, Select, Badge } from './UI'
 import { ColumnDef } from '@tanstack/react-table'
 import { MemberCredential } from './MemberCredential'
 import { MemberHistory } from './MemberHistory'
+import { NfcTagModal } from './NfcTagModal'
 import { MEMBER_STATUS_DISPLAY } from '../utils/memberStatus'
 import { toLocalDateString, addDaysToDateString, isValidDateString, getMemberStatus } from '../utils/dates'
 
@@ -19,6 +20,8 @@ export function Members({ data, updateData }: MembersProps) {
   // Se guarda el id para que el historial muestre siempre los datos actuales del miembro
   const [historyMemberId, setHistoryMemberId] = useState<string | null>(null)
   const historyMember = data.members.find(m => m.id === historyMemberId) ?? null
+  const [nfcMemberId, setNfcMemberId] = useState<string | null>(null)
+  const nfcMember = data.members.find(m => m.id === nfcMemberId) ?? null
   const [form, setForm] = useState({
     name: '',
     phone: '',
@@ -32,6 +35,18 @@ export function Members({ data, updateData }: MembersProps) {
       accessorKey: 'code',
       header: 'Código',
       cell: info => <span className="font-mono">{info.getValue() as string}</span>,
+    },
+    {
+      // El valor es el número de la tarjeta, así que acercar una tarjeta en el buscador encuentra al miembro
+      id: 'nfcTag',
+      accessorFn: member => member.nfcTag ?? '',
+      header: 'NFC',
+      cell: info => {
+        const tag = info.getValue() as string
+        return tag
+          ? <span className="text-green-700 font-medium" title={tag}>✓ Vinculada</span>
+          : <span className="text-gray-400">—</span>
+      },
     },
     { accessorKey: 'name', header: 'Nombre' },
     { accessorKey: 'phone', header: 'Teléfono' },
@@ -61,6 +76,7 @@ export function Members({ data, updateData }: MembersProps) {
         <div className="flex gap-2">
           <Button size="sm" variant="secondary" onClick={() => setHistoryMemberId(row.original.id)}>Historial</Button>
           <Button size="sm" variant="secondary" onClick={() => setCredentialMember(row.original)}>Credencial</Button>
+          <Button size="sm" variant="secondary" onClick={() => setNfcMemberId(row.original.id)}>NFC</Button>
           {status === 'active' && (
             <Button size="sm" variant="secondary" onClick={() => handleFreeze(row.original)}>Congelar</Button>
           )}
@@ -203,6 +219,12 @@ export function Members({ data, updateData }: MembersProps) {
           <Button onClick={handleSubmit}>Guardar</Button>
         </div>
       </Modal>
+
+      <NfcTagModal
+        member={nfcMember}
+        onClose={() => setNfcMemberId(null)}
+        onChanged={async () => updateData(await window.api.getData())}
+      />
 
       <MemberHistory
         member={historyMember}

@@ -13,6 +13,7 @@ import type {
   Attendance,
   CheckInResult,
   AddSaleResult,
+  LinkNfcResult,
   ImportSummary,
   ReceptionMember,
   ReceptionState,
@@ -39,6 +40,7 @@ import {
   sameText
 } from './csv'
 import { setupAutoUpdates } from './updates'
+import { normalizeNfcTag } from '../shared/text'
 
 log.initialize()
 log.info('Application starting...')
@@ -84,6 +86,9 @@ const COLLECTION_KEYS: CollectionKey[] = [
 
 const MEMBER_CODE_START = 1001
 const MEMBER_CODE_PATTERN = /^[0-9A-Z-]{1,20}$/
+// Número de serie de tarjeta: dígitos decimales o hexadecimales. El mínimo de 6 evita que se confunda
+// con un código de miembro (1001, 1002…)
+const NFC_TAG_PATTERN = /^[0-9A-F]{6,32}$/
 
 function createDefaultData(): AppData {
   return structuredClone(defaultData)
@@ -157,7 +162,7 @@ function loadData(): void {
   const loaded = readDataFile(dataPath)
   if (loaded) {
     data = loaded
-    if (ensureMemberCodes()) saveData()
+    if (normalizeMembers()) saveData()
     log.info('Data loaded from file')
     return
   }
@@ -175,7 +180,7 @@ function loadData(): void {
   const backup = fs.existsSync(backupPath) ? readDataFile(backupPath) : null
   if (backup) {
     data = backup
-    ensureMemberCodes()
+    normalizeMembers()
     saveData()
     loadWarning = `El archivo de datos estaba dañado y se restauró el último respaldo. Es posible que falten los cambios más recientes. El archivo dañado se guardó en:\n${corruptPath}`
     log.warn('Data restored from backup')
@@ -225,6 +230,34 @@ function getNextMemberCode(): string {
     return Math.max(max, numeric)
   }, MEMBER_CODE_START - 1)
   return String(maxCode + 1)
+}
+
+// Deja cada tarjeta NFC normalizada y vinculada a un solo miembro (conserva la primera)
+function ensureUniqueNfcTags(): boolean {
+  const usedTags = new Set<string>()
+  let changed = false
+  for (const member of data.members) {
+    if (member.nfcTag === undefined) continue
+    const tag = typeof member.nfcTag === 'string' ? normalizeNfcTag(member.nfcTag) : ''
+    if (NFC_TAG_PATTERN.test(tag) && !usedTags.has(tag)) {
+      if (tag !== member.nfcTag) {
+        member.nfcTag = tag
+        changed = true
+      }
+      usedTags.add(tag)
+    } else {
+      delete member.nfcTag
+      changed = true
+    }
+  }
+  return changed
+}
+
+// Revisión de los miembros tras cargar o importar datos: códigos y tarjetas válidos y sin repetir
+function normalizeMembers(): boolean {
+  const codesChanged = ensureMemberCodes()
+  const tagsChanged = ensureUniqueNfcTags()
+  return codesChanged || tagsChanged
 }
 
 // Asigna código a los miembros que no lo tienen o lo tienen inválido/repetido (conserva el primero)
@@ -282,6 +315,11 @@ function findMemberByCode(code: string): Member | null | 'ambiguous' {
   const memberCode = normalizeMemberCode(normalized)
   const byCode = data.members.find(m => m.code === memberCode)
   if (byCode) return byCode
+
+  // Tarjeta NFC: el lector escribe su número de serie como si fuera un teclado
+  const tag = normalizeNfcTag(normalized)
+  const byNfc = NFC_TAG_PATTERN.test(tag) ? data.members.find(m => m.nfcTag === tag) : undefined
+  if (byNfc) return byNfc
 
   const byId = data.members.find(m => m.id === normalized)
   if (byId) return byId
@@ -495,6 +533,7 @@ function getReceptionState(): ReceptionState {
     .map(member => ({
       id: member.id,
       code: member.code,
+      nfcTag: member.nfcTag ?? '',
       // Datos importados pueden traer campos vacíos; no deben romper la Recepción
       name: member.name ?? '',
       phone: member.phone ?? '',
@@ -570,8 +609,35 @@ app.whenReady().then(() => {
     const index = data.members.findIndex(m => m.id === id)
     if (index !== -1) {
       const current = data.members[index]
-      // El id y el código no se cambian desde el formulario
-      data.members[index] = { ...current, ...updates, id: current.id, code: current.code }
+      // El id, el código y la tarjeta NFC no se cambian desde el formulario
+      data.members[index] = { ...current, ...updates, id: current.id, code: current.code, nfcTag: current.nfcTag }
+      saveData()
+    }
+  })
+
+  ipcMain.handle('link-nfc-tag', (_event, memberId: string, rawTag: string): LinkNfcResult => {
+    const member = data.members.find(m => m.id === memberId)
+    if (!member) return { ok: false, error: 'El miembro ya no existe.' }
+
+    const tag = normalizeNfcTag(rawTag)
+    if (!NFC_TAG_PATTERN.test(tag)) {
+      return { ok: false, error: 'La lectura no parece el número de una tarjeta NFC. Acerca la tarjeta de nuevo.' }
+    }
+    const owner = data.members.find(m => m.nfcTag === tag && m.id !== member.id)
+    if (owner) return { ok: false, error: `Esa tarjeta ya está vinculada a ${owner.name}.` }
+    if (data.members.some(m => m.code === tag)) {
+      return { ok: false, error: 'Ese número coincide con el código de un miembro; usa otra tarjeta.' }
+    }
+
+    member.nfcTag = tag
+    saveData()
+    return { ok: true, member }
+  })
+
+  ipcMain.handle('unlink-nfc-tag', (_event, memberId: string): void => {
+    const member = data.members.find(m => m.id === memberId)
+    if (member?.nfcTag) {
+      delete member.nfcTag
       saveData()
     }
   })
@@ -756,7 +822,7 @@ app.whenReady().then(() => {
     data.entries = merge(data.entries, importedData.entries)
     data.membershipSales = merge(data.membershipSales, importedData.membershipSales)
     data.attendances = merge(data.attendances, importedData.attendances)
-    ensureMemberCodes()
+    normalizeMembers()
     if (added > 0) saveData()
     return { data, added, skipped }
   })
@@ -855,6 +921,20 @@ app.whenReady().then(() => {
           warnings.push(`Fila ${rowNumber}: membresía "${membershipValue}" no existe; el miembro quedó sin membresía.`)
         }
 
+        // Tarjeta NFC opcional; si no es válida o ya está vinculada, el miembro se importa sin ella
+        const rawTag = record.nfctag ?? ''
+        const nfcTag = normalizeNfcTag(rawTag)
+        let validTag: string | null = null
+        if (rawTag) {
+          if (!NFC_TAG_PATTERN.test(nfcTag)) {
+            warnings.push(`Fila ${rowNumber}: tarjeta NFC "${rawTag}" no válida; el miembro quedó sin tarjeta.`)
+          } else if (data.members.some(m => m.nfcTag === nfcTag)) {
+            warnings.push(`Fila ${rowNumber}: la tarjeta NFC "${rawTag}" ya está vinculada a otro miembro; el miembro quedó sin tarjeta.`)
+          } else {
+            validTag = nfcTag
+          }
+        }
+
         const member: Member = {
           id: generateId(),
           code,
@@ -867,6 +947,7 @@ app.whenReady().then(() => {
           status,
           // Sin fecha de congelamiento no se podrían devolver los días al descongelar
           ...(status === 'frozen' ? { frozenAt: today } : {}),
+          ...(validTag ? { nfcTag: validTag } : {}),
           createdAt: new Date().toISOString()
         }
         data.members.push(member)
@@ -910,7 +991,7 @@ app.whenReady().then(() => {
     })
 
     if (added > 0) {
-      ensureMemberCodes()
+      normalizeMembers()
       saveData()
     }
     return { data, added, skipped, duplicates, warnings }
