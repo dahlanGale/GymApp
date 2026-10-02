@@ -144,6 +144,7 @@ function preserveCorruptFile(): string | null {
 
 function loadData(): void {
   dataPath = getDataPath()
+  log.info(`Data file: ${dataPath}`)
 
   if (!fs.existsSync(dataPath)) {
     data = createDefaultData()
@@ -186,6 +187,9 @@ function loadData(): void {
 
 // Escritura atómica: archivo temporal + fsync + rename; la versión anterior queda en .bak
 function saveData(): void {
+  // Las ventanas se refrescan aunque no se pueda escribir el archivo: los datos en memoria sí cambiaron
+  notifyDataChanged()
+
   if (!dataPath) {
     log.warn('Save skipped: data file unavailable')
     return
@@ -205,7 +209,6 @@ function saveData(): void {
     }
     fs.renameSync(tmpPath, dataPath)
     log.info('Data saved')
-    notifyDataChanged()
   } catch (error) {
     log.error('Error saving data:', error)
   }
@@ -295,14 +298,22 @@ function generateId(): string {
 }
 
 let mainWindow: BrowserWindow | null = null
-let checkInWindow: BrowserWindow | null = null
-let receptionWindow: BrowserWindow | null = null
+const secondaryWindows = new Map<SecondaryWindow, BrowserWindow>()
 
-// La Recepción muestra miembros y asistencias en vivo; se refresca cada vez que se guardan datos
+// Avisa a la ventana principal y a la Recepción que cambiaron los datos, para que se refresquen.
+// El kiosco no muestra datos, así que no necesita el aviso.
 function notifyDataChanged(): void {
-  if (receptionWindow && !receptionWindow.isDestroyed()) {
-    receptionWindow.webContents.send('data-changed')
+  for (const win of [mainWindow, secondaryWindows.get('reception')]) {
+    if (win && !win.isDestroyed()) win.webContents.send('data-changed')
   }
+}
+
+// En macOS el menú de la app es global y también aparece con el kiosco al frente;
+// desde el kiosco no se debe poder abrir ninguna otra ventana
+function openFromMenu(kind: SecondaryWindow): void {
+  const focused = BrowserWindow.getFocusedWindow()
+  if (focused && focused === secondaryWindows.get('checkin')) return
+  openSecondaryWindow(kind)
 }
 
 function createWindow(): void {
@@ -370,11 +381,11 @@ function createWindow(): void {
       submenu: [
         { 
           label: 'Abrir Check-In',
-          click: () => createCheckInWindow()
+          click: () => openFromMenu('checkin')
         },
         {
           label: 'Abrir Recepción',
-          click: () => createReceptionWindow()
+          click: () => openFromMenu('reception')
         },
         { type: 'separator' },
         { role: 'minimize' },
@@ -410,50 +421,12 @@ interface SecondaryWindowOptions {
   height: number
   minWidth: number
   minHeight: number
-  // Nombre del preload y de la página HTML (p. ej. 'checkin' → preload/checkin.js y checkin.html)
-  entry: SecondaryWindow
 }
 
-// Ventanas auxiliares (Check-In, Recepción): preload mínimo, sandbox y sin DevTools en producción
-function createSecondaryWindow(options: SecondaryWindowOptions, onClosed: () => void): BrowserWindow {
-  const win = new BrowserWindow({
-    width: options.width,
-    height: options.height,
-    minWidth: options.minWidth,
-    minHeight: options.minHeight,
-    show: false,
-    autoHideMenuBar: true,
-    title: options.title,
-    webPreferences: {
-      preload: join(__dirname, `../preload/${options.entry}.js`),
-      sandbox: true,
-      contextIsolation: true,
-      nodeIntegration: false,
-      devTools: is.dev
-    }
-  })
-
-  win.on('ready-to-show', () => {
-    win.show()
-    log.info(`${options.title} window shown`)
-  })
-
-  win.on('closed', () => {
-    onClosed()
-    log.info(`${options.title} window closed`)
-  })
-
-  win.webContents.setWindowOpenHandler(() => {
-    return { action: 'deny' }
-  })
-
-  if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
-    win.loadURL(`${process.env['ELECTRON_RENDERER_URL']}/${options.entry}.html`)
-  } else {
-    win.loadFile(join(__dirname, `../renderer/${options.entry}.html`))
-  }
-
-  return win
+// Cada ventana auxiliar usa preload/<kind>.js y <kind>.html
+const SECONDARY_WINDOW_OPTIONS: Record<SecondaryWindow, SecondaryWindowOptions> = {
+  checkin: { title: 'Check-In', width: 600, height: 500, minWidth: 500, minHeight: 400 },
+  reception: { title: 'Recepción', width: 1100, height: 720, minWidth: 820, minHeight: 520 }
 }
 
 function focusWindow(win: BrowserWindow): void {
@@ -462,46 +435,76 @@ function focusWindow(win: BrowserWindow): void {
   win.focus()
 }
 
-function createCheckInWindow(): void {
-  if (checkInWindow) {
-    focusWindow(checkInWindow)
+// Ventanas auxiliares (Check-In, Recepción): preload mínimo, sandbox, sin menú y sin DevTools en producción
+function openSecondaryWindow(kind: SecondaryWindow): void {
+  const existing = secondaryWindows.get(kind)
+  if (existing && !existing.isDestroyed()) {
+    focusWindow(existing)
     return
   }
-  checkInWindow = createSecondaryWindow(
-    { title: 'Check-In', width: 600, height: 500, minWidth: 500, minHeight: 400, entry: 'checkin' },
-    () => { checkInWindow = null }
-  )
-}
 
-function createReceptionWindow(): void {
-  if (receptionWindow) {
-    focusWindow(receptionWindow)
-    return
+  const options = SECONDARY_WINDOW_OPTIONS[kind]
+  const win = new BrowserWindow({
+    width: options.width,
+    height: options.height,
+    minWidth: options.minWidth,
+    minHeight: options.minHeight,
+    show: false,
+    title: options.title,
+    webPreferences: {
+      preload: join(__dirname, `../preload/${kind}.js`),
+      sandbox: true,
+      contextIsolation: true,
+      nodeIntegration: false,
+      devTools: is.dev
+    }
+  })
+  // En Windows y Linux el menú de la app va dentro de cada ventana (Alt lo muestra);
+  // sin él, el kiosco no puede abrir la Recepción ni otras ventanas
+  win.removeMenu()
+  secondaryWindows.set(kind, win)
+
+  win.on('ready-to-show', () => {
+    win.show()
+    log.info(`${options.title} window shown`)
+  })
+
+  win.on('closed', () => {
+    if (secondaryWindows.get(kind) === win) secondaryWindows.delete(kind)
+    log.info(`${options.title} window closed`)
+  })
+
+  win.webContents.setWindowOpenHandler(() => {
+    return { action: 'deny' }
+  })
+
+  if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
+    win.loadURL(`${process.env['ELECTRON_RENDERER_URL']}/${kind}.html`)
+  } else {
+    win.loadFile(join(__dirname, `../renderer/${kind}.html`))
   }
-  receptionWindow = createSecondaryWindow(
-    { title: 'Recepción', width: 1100, height: 720, minWidth: 820, minHeight: 520, entry: 'reception' },
-    () => { receptionWindow = null }
-  )
 }
 
 function getReceptionState(): ReceptionState {
   const today = toLocalDateString()
   const membershipNames = new Map(data.memberships.map(m => [m.id, m.name]))
+  const collator = new Intl.Collator('es')
 
   const members: ReceptionMember[] = data.members
     .map(member => ({
       id: member.id,
       code: member.code,
-      name: member.name,
-      phone: member.phone,
+      // Datos importados pueden traer campos vacíos; no deben romper la Recepción
+      name: member.name ?? '',
+      phone: member.phone ?? '',
       membershipName: membershipNames.get(member.membershipId) ?? 'Sin membresía',
       endDate: member.endDate,
       status: getMemberStatus(member, today)
     }))
-    .sort((a, b) => a.name.localeCompare(b.name, 'es'))
+    .sort((a, b) => collator.compare(a.name, b.name))
 
   const todayAttendances = data.attendances
-    .filter(a => toLocalDateString(new Date(a.timestamp)) === today)
+    .filter(a => typeof a.timestamp === 'string' && toLocalDateString(new Date(a.timestamp)) === today)
     .sort((a, b) => b.timestamp.localeCompare(a.timestamp))
 
   return { members, todayAttendances }
@@ -527,13 +530,23 @@ function performCheckIn(member: Member): CheckInResult {
 
   data.attendances.push(attendance)
   saveData()
-  if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.webContents.send('attendance-recorded')
-  }
   return { status: 'success', memberName: member.name }
 }
 
+// Una sola instancia: dos procesos con su propia copia de los datos se sobrescribirían el archivo.
+// Si se vuelve a abrir la app, se muestra la ventana principal de la instancia que ya corre.
+const hasSingleInstanceLock = app.requestSingleInstanceLock()
+if (!hasSingleInstanceLock) {
+  app.quit()
+} else {
+  app.on('second-instance', () => {
+    if (mainWindow) focusWindow(mainWindow)
+    else createWindow()
+  })
+}
+
 app.whenReady().then(() => {
+  if (!hasSingleInstanceLock) return
   electronApp.setAppUserModelId('com.gympos.app')
 
   loadData()
@@ -918,8 +931,8 @@ app.whenReady().then(() => {
   })
 
   ipcMain.handle('open-window', (_event, kind: SecondaryWindow) => {
-    if (kind === 'checkin') createCheckInWindow()
-    else if (kind === 'reception') createReceptionWindow()
+    // El valor viene del renderer; solo se aceptan las ventanas conocidas
+    if (Object.hasOwn(SECONDARY_WINDOW_OPTIONS, kind)) openSecondaryWindow(kind)
   })
 
   app.on('browser-window-created', (_, window) => {

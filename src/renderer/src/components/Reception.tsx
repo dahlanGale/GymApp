@@ -1,35 +1,23 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ReceptionMember, ReceptionState } from '../types'
 import { Badge, Button } from './UI'
-import { CheckInFeedbackType, getFeedbackFromResult } from '../utils/checkInFeedback'
+import { CHECK_IN_FEEDBACK_COLORS, CheckInFeedbackType, getFeedbackFromResult } from '../utils/checkInFeedback'
+import { MEMBER_STATUS_DISPLAY } from '../utils/memberStatus'
+import { formatTime } from '../utils/format'
+import { toLocalDateString } from '../utils/dates'
+import { normalizeText } from '../../../shared/text'
 
 // Con muchos miembros, la lista sin filtro se recorta para que la ventana siga siendo ágil
 const MAX_VISIBLE_MEMBERS = 100
 const FEEDBACK_DURATION_MS = 3000
-
-const STATUS_BADGES: Record<ReceptionMember['status'], { variant: 'success' | 'danger' | 'warning'; label: string }> = {
-  active: { variant: 'success', label: 'Activo' },
-  expired: { variant: 'danger', label: 'Vencido' },
-  frozen: { variant: 'warning', label: 'Congelado' },
-}
-
-const FEEDBACK_COLORS: Record<CheckInFeedbackType, string> = {
-  success: 'bg-green-100 border-green-500 text-green-800',
-  warning: 'bg-yellow-100 border-yellow-500 text-yellow-800',
-  error: 'bg-red-100 border-red-500 text-red-800',
-}
-
-function normalizeSearch(value: string): string {
-  return value.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim()
-}
-
-function formatTime(timestamp: string): string {
-  return new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-}
+// Cada minuto se revisa si cambió el día, para no seguir mostrando las entradas de ayer
+const DAY_CHECK_INTERVAL_MS = 60 * 1000
 
 export function Reception() {
   const [state, setState] = useState<ReceptionState>({ members: [], todayAttendances: [] })
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState(false)
+  const [today, setToday] = useState(toLocalDateString())
   const [search, setSearch] = useState('')
   const [feedback, setFeedback] = useState<{ type: CheckInFeedbackType; message: string } | null>(null)
   const [pendingMemberId, setPendingMemberId] = useState<string | null>(null)
@@ -39,8 +27,10 @@ export function Reception() {
   const refresh = useCallback(async () => {
     try {
       setState(await window.receptionApi.getState())
+      setLoadError(false)
     } catch (error: unknown) {
       console.error('Error loading reception data:', error)
+      setLoadError(true)
     } finally {
       setLoading(false)
     }
@@ -61,6 +51,18 @@ export function Reception() {
     }
   }, [refresh])
 
+  // Si la ventana queda abierta toda la noche, al cambiar el día se recargan las entradas y los estados
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const now = toLocalDateString()
+      if (now !== today) {
+        setToday(now)
+        refresh()
+      }
+    }, DAY_CHECK_INTERVAL_MS)
+    return () => clearInterval(interval)
+  }, [today, refresh])
+
   // Hora de la última entrada de hoy por miembro (todayAttendances viene de la más reciente a la más antigua)
   const lastEntryByMember = useMemo(() => {
     const entries = new Map<string, string>()
@@ -71,15 +73,27 @@ export function Reception() {
   }, [state.todayAttendances])
 
   const filteredMembers = useMemo(() => {
-    const query = normalizeSearch(search)
+    const query = normalizeText(search)
     if (!query) return state.members
     const digits = query.replace(/\D/g, '')
-    return state.members.filter(member =>
-      normalizeSearch(member.name).includes(query) ||
+    const matches = state.members.filter(member =>
+      normalizeText(member.name).includes(query) ||
       member.code.toLowerCase().includes(query) ||
       (digits.length > 0 && member.phone.replace(/\D/g, '').includes(digits))
     )
+    // Un código exacto (p. ej. escaneado de la credencial) va primero
+    const exact = matches.find(member => member.code.toLowerCase() === query)
+    return exact ? [exact, ...matches.filter(member => member !== exact)] : matches
   }, [state.members, search])
+
+  // Miembro que Enter registraría: el del código exacto, o el único resultado de la búsqueda
+  const enterTarget = useMemo(() => {
+    const query = normalizeText(search)
+    if (!query) return null
+    const exact = state.members.find(member => member.code.toLowerCase() === query)
+    if (exact) return exact
+    return filteredMembers.length === 1 ? filteredMembers[0] : null
+  }, [state.members, search, filteredMembers])
 
   const visibleMembers = filteredMembers.slice(0, MAX_VISIBLE_MEMBERS)
 
@@ -95,12 +109,14 @@ export function Reception() {
   const handleCheckIn = async (member: ReceptionMember) => {
     if (pendingMemberId) return
     setPendingMemberId(member.id)
+    const searchAtClick = search
     try {
+      // La lista se actualiza sola con el aviso data-changed que manda el proceso main al guardar
       const result = await window.receptionApi.checkIn(member.id)
       const { type, message } = getFeedbackFromResult(result)
       showFeedback(type, message)
-      if (result.status === 'success') setSearch('')
-      await refresh()
+      // Solo se limpia si nadie escribió otra búsqueda mientras se registraba
+      if (result.status === 'success') setSearch(current => (current === searchAtClick ? '' : current))
     } catch (error: unknown) {
       console.error('Error during reception check-in:', error)
       showFeedback('error', 'Error al registrar entrada')
@@ -111,16 +127,17 @@ export function Reception() {
   }
 
   const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    // Enter registra directamente cuando la búsqueda deja un solo miembro
-    if (e.key === 'Enter' && filteredMembers.length === 1) {
+    // Enter registra el código exacto o el único miembro que deja la búsqueda
+    if (e.key === 'Enter' && enterTarget) {
       e.preventDefault()
-      handleCheckIn(filteredMembers[0])
+      handleCheckIn(enterTarget)
     } else if (e.key === 'Escape') {
       setSearch('')
     }
   }
 
-  const todayLabel = new Date().toLocaleDateString([], { weekday: 'long', day: 'numeric', month: 'long' })
+  const [year, month, day] = today.split('-').map(Number)
+  const todayLabel = new Date(year, month - 1, day).toLocaleDateString([], { weekday: 'long', day: 'numeric', month: 'long' })
 
   return (
     <div className="h-screen flex flex-col bg-gray-50">
@@ -136,7 +153,7 @@ export function Reception() {
       </header>
 
       {feedback && (
-        <div className={`mx-4 mt-4 px-4 py-3 rounded-lg border-2 text-center font-semibold ${FEEDBACK_COLORS[feedback.type]}`}>
+        <div className={`mx-4 mt-4 px-4 py-3 rounded-lg border-2 text-center font-semibold ${CHECK_IN_FEEDBACK_COLORS[feedback.type]}`}>
           {feedback.message}
         </div>
       )}
@@ -154,13 +171,21 @@ export function Reception() {
               className="w-full px-4 py-3 text-lg border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
             <p className="mt-2 text-xs text-gray-500">
-              Pulsa “Registrar entrada”, o Enter cuando la búsqueda deje un solo miembro.
+              Pulsa “Registrar entrada”, o Enter con el código exacto o cuando la búsqueda deje un solo miembro.
             </p>
           </div>
 
           <div className="flex-1 overflow-y-auto">
             {loading ? (
               <p className="p-6 text-center text-gray-500">Cargando…</p>
+            ) : loadError ? (
+              <div className="p-6 text-center">
+                <p className="text-red-700 font-medium">No se pudieron cargar los miembros.</p>
+                <p className="text-sm text-gray-500 mt-1">Revisa los datos importados recientemente.</p>
+                <Button size="sm" variant="secondary" className="mt-3" onClick={() => refresh()}>
+                  Reintentar
+                </Button>
+              </div>
             ) : visibleMembers.length === 0 ? (
               <p className="p-6 text-center text-gray-500">
                 {state.members.length === 0 ? 'No hay miembros registrados.' : 'Ningún miembro coincide con la búsqueda.'}
@@ -168,7 +193,7 @@ export function Reception() {
             ) : (
               <ul>
                 {visibleMembers.map(member => {
-                  const badge = STATUS_BADGES[member.status]
+                  const status = MEMBER_STATUS_DISPLAY[member.status]
                   const lastEntry = lastEntryByMember.get(member.id)
                   const canCheckIn = member.status === 'active'
                   return (
@@ -185,14 +210,14 @@ export function Reception() {
                         </div>
                       </div>
                       <div className="flex flex-col items-end gap-1">
-                        <Badge variant={badge.variant}>{badge.label}</Badge>
+                        <Badge variant={status.variant}>{status.label}</Badge>
                         {lastEntry && <span className="text-xs font-medium text-green-700">✓ Entró {formatTime(lastEntry)}</span>}
                       </div>
                       <Button
                         size="sm"
                         variant="success"
                         disabled={!canCheckIn || pendingMemberId !== null}
-                        title={canCheckIn ? undefined : `No puede entrar: membresía ${badge.label.toLowerCase()}`}
+                        title={canCheckIn ? undefined : `No puede entrar: membresía ${status.membershipLabel}`}
                         onClick={() => handleCheckIn(member)}
                       >
                         {pendingMemberId === member.id ? 'Registrando…' : 'Registrar entrada'}

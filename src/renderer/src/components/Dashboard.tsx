@@ -4,6 +4,7 @@ import { Table, StatCard, Card } from './UI'
 import { ColumnDef } from '@tanstack/react-table'
 import { WeeklyAttendance } from './WeeklyAttendance'
 import { toLocalDateString, getMemberStatus, isValidDateString } from '../utils/dates'
+import { formatMoney } from '../utils/format'
 
 interface DashboardProps {
   data: AppData
@@ -31,7 +32,7 @@ export function Dashboard({ data }: DashboardProps) {
     {
       accessorKey: 'total',
       header: 'Total',
-      cell: info => `$${(info.getValue() as number).toFixed(2)}`,
+      cell: info => formatMoney(info.getValue() as number),
     },
     {
       accessorKey: 'paymentMethod',
@@ -81,12 +82,13 @@ export function Dashboard({ data }: DashboardProps) {
       </header>
       <div className="flex-1 p-6 overflow-y-auto">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-          <StatCard title="Ventas Hoy" value={`$${todayRevenue.toFixed(2)}`} />
+          <StatCard title="Ventas Hoy" value={formatMoney(todayRevenue)} />
           <StatCard title="Transacciones Hoy" value={todaySales.length} variant="accent" />
           <StatCard title="Miembros Activos" value={activeMembers} variant="primary" />
           <StatCard title="Total Miembros" value={data.members.length} />
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
+        {/* Dos columnas solo cuando hay espacio; en ventanas angostas se apilan */}
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
           <Card>
             <h3 className="text-lg font-semibold text-slate-800 mb-4">Ventas Recientes</h3>
             <Table data={recentSales} columns={salesColumns} searchPlaceholder="Buscar venta..." />

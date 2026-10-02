@@ -11,9 +11,9 @@ function App() {
     loadData()
   }, [])
 
-  // Los check-ins llegan desde otra ventana; se refresca el estado para verlos sin recargar
+  // Los check-ins del kiosco y de Recepción llegan desde otras ventanas; se refresca para verlos sin recargar
   useEffect(() => {
-    return window.api.onAttendanceRecorded(() => {
+    return window.api.onDataChanged(() => {
       window.api.getData()
         .then(setData)
         .catch((error: unknown) => console.error('Error refreshing data:', error))

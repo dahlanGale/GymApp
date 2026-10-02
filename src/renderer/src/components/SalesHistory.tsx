@@ -3,12 +3,12 @@ import { AppData, MembershipSale, Sale } from '../types'
 import { Table, StatCard, Card, Button, Input } from './UI'
 import { ColumnDef } from '@tanstack/react-table'
 import { toLocalDateString } from '../utils/dates'
+import { formatMoney } from '../utils/format'
 
 interface SalesHistoryProps {
   data: AppData
 }
 
-const formatMoney = (value: number) => `$${value.toFixed(2)}`
 const formatPaymentMethod = (method: 'cash' | 'card') => (method === 'cash' ? 'Efectivo' : 'Tarjeta')
 
 export function SalesHistory({ data }: SalesHistoryProps) {

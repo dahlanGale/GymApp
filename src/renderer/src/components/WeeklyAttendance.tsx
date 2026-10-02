@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { AppData, Attendance } from '../types'
 import { Card } from './UI'
 import { addDaysToDateString, toLocalDateString } from '../utils/dates'
+import { formatTime } from '../utils/format'
 
 interface WeeklyAttendanceProps {
   data: AppData
@@ -26,10 +27,6 @@ function getWeekStart(date: Date): string {
 function formatDayLabel(value: string): string {
   const [, month, day] = value.split('-')
   return `${day}/${month}`
-}
-
-function formatTime(timestamp: string): string {
-  return new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 }
 
 export function WeeklyAttendance({ data }: WeeklyAttendanceProps) {

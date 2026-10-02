@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { AppData, Entry } from '../types'
 import { Table, StatCard, Card, Button, Modal, Input, Select } from './UI'
 import { ColumnDef } from '@tanstack/react-table'
+import { formatMoney } from '../utils/format'
 
 interface EntriesProps {
   data: AppData
@@ -30,12 +31,12 @@ export function Entries({ data, updateData }: EntriesProps) {
     {
       accessorKey: 'unitCost',
       header: 'Costo Unitario',
-      cell: info => `$${(info.getValue() as number).toFixed(2)}`,
+      cell: info => formatMoney(info.getValue() as number),
     },
     {
       id: 'total',
       header: 'Total',
-      cell: ({ row }) => `$${(row.original.quantity * row.original.unitCost).toFixed(2)}`,
+      cell: ({ row }) => formatMoney(row.original.quantity * row.original.unitCost),
     },
     {
       accessorKey: 'supplier',
@@ -75,7 +76,7 @@ export function Entries({ data, updateData }: EntriesProps) {
       <div className="p-6">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
           <StatCard title="Total Entradas" value={data.entries.length} />
-          <StatCard title="Invertido Total" value={`$${totalInvested.toFixed(2)}`} variant="primary" />
+          <StatCard title="Invertido Total" value={formatMoney(totalInvested)} variant="primary" />
         </div>
         <div className="flex justify-end mb-6">
           <Button onClick={() => setShowModal(true)}>
@@ -120,7 +121,7 @@ export function Entries({ data, updateData }: EntriesProps) {
           />
           {form.productId && form.quantity > 0 && form.unitCost > 0 && (
             <div className="p-3 bg-gray-50 rounded-lg mt-2">
-              <strong>Total:</strong> ${(form.quantity * form.unitCost).toFixed(2)}
+              <strong>Total:</strong> {formatMoney(form.quantity * form.unitCost)}
             </div>
           )}
         </div>

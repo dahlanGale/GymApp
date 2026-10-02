@@ -8,8 +8,19 @@ import {
   createColumnHelper,
   SortingState,
   ColumnDef,
+  FilterFn,
 } from '@tanstack/react-table'
 import { useState } from 'react'
+import { normalizeText } from '../../../shared/text'
+
+// Búsqueda sin importar acentos, mayúsculas ni espacios al inicio o al final (p. ej. al pegar o escanear)
+function matchesSearch<T>(): FilterFn<T> {
+  return (row, columnId, filterValue: string) => {
+    const query = normalizeText(filterValue)
+    if (!query) return true
+    return normalizeText(String(row.getValue(columnId) ?? '')).includes(query)
+  }
+}
 
 interface TableProps<T> {
   data: T[]
@@ -34,6 +45,7 @@ export function Table<T>({
     },
     onSortingChange: setSorting,
     onGlobalFilterChange: setGlobalFilter,
+    globalFilterFn: matchesSearch<T>(),
     getCoreRowModel: getCoreRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
