@@ -18,6 +18,7 @@ GymPOS es una aplicación de escritorio completa diseñada para gimnasios que ne
 - Búsqueda por nombre, código, teléfono o email (sin importar acentos ni mayúsculas)
 - Estado calculado por la fecha de vencimiento: Activo, Expirado o Congelado
 - **Credencial** imprimible con código de barras (Code 39) que se puede escanear en el check-in
+- **Tarjeta NFC**: con el botón **NFC** se vincula una tarjeta al miembro acercándola al lector; desde ahí también se reemplaza o se desvincula. Cada tarjeta solo puede estar vinculada a un miembro.
 - **Historial** por miembro: asistencias, membresías compradas y compras de productos
 - **Congelar / Descongelar**: al descongelar, el vencimiento se recorre los días que estuvo congelado
 
@@ -34,8 +35,10 @@ GymPOS es una aplicación de escritorio completa diseñada para gimnasios que ne
 ### Check-In y Asistencias
 La app tiene dos ventanas que corren en paralelo al sistema y se abren desde el menú lateral (**Ventanas**) o desde el menú **Ventana**:
 
-- **Check-In (kiosco)**: para los miembros. Escanean su credencial o escriben su código, teléfono o email y la app los deja pasar o les dice por qué no. No muestra datos de otros miembros ni permite abrir otras ventanas.
-- **Recepción**: para el personal. Busca a cualquier miembro, registra su entrada con un clic (o Enter con el código) y muestra en vivo las entradas del día.
+- **Check-In (kiosco)**: para los miembros. Acercan su tarjeta NFC, escanean su credencial o escriben su código, teléfono o email, y la app los deja pasar o les dice por qué no. No muestra datos de otros miembros ni permite abrir otras ventanas.
+- **Recepción**: para el personal. Busca a cualquier miembro, registra su entrada con un clic (o Enter con el código, o acercando su tarjeta NFC) y muestra en vivo las entradas del día.
+
+**Lector NFC**: la app funciona con lectores USB que se comportan como teclado (los más comunes para control de acceso): al acercar la tarjeta escriben su número de serie y presionan Enter. No necesitan drivers en Windows ni en macOS. Basta con que el cursor esté en el campo del Check-In, de la Recepción o de la ventana de vincular tarjeta. Los lectores PC/SC, como el ACR122U, no escriben como teclado y no son compatibles por ahora.
 
 Las dos ventanas aplican las mismas reglas: no entran miembros congelados ni con la membresía vencida, y una entrada repetida dentro de 2 minutos no se vuelve a registrar. Todo lo que registran aparece al momento en la Recepción, en la página **Asistencias** y en el Dashboard.
 
@@ -43,7 +46,7 @@ Las dos ventanas aplican las mismas reglas: no entran miembros congelados ni con
 - **Exportar** un respaldo completo en JSON e **importarlo** después: solo se agregan los registros que todavía no existen, así que importar el mismo respaldo dos veces no duplica nada.
 - **Importar CSV** de miembros, productos o membresías:
   - Acepta archivos de Excel en español: separador `;` o `,`, números como `1.300,50` o `1,300.50`, fechas `AAAA-MM-DD` o `DD/MM/AAAA` y valores `VERDADERO`/`sí`.
-  - Encabezados en inglés o en español (`name`/`nombre`, `phone`/`teléfono`, `enddate`/`vencimiento`, `price`/`precio`…).
+  - Encabezados en inglés o en español (`name`/`nombre`, `phone`/`teléfono`, `enddate`/`vencimiento`, `price`/`precio`…). Para miembros, la columna `nfc` o `tarjeta` vincula su tarjeta NFC.
   - Omite los registros que ya existen y muestra avisos de los valores que no pudo interpretar.
 
 ### Almacenamiento de Datos

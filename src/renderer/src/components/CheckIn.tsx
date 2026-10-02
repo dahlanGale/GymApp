@@ -79,7 +79,7 @@ export function CheckIn({ standalone = false }: CheckInProps) {
         <div className="bg-white rounded-lg shadow-lg p-8">
           <div className="text-center mb-8">
             <h1 className="text-3xl font-bold text-gray-800 mb-2">Check-In</h1>
-            <p className="text-gray-600">Escanea o ingresa tu código de miembro</p>
+            <p className="text-gray-600">Acerca tu tarjeta, escanea tu credencial o escribe tu código</p>
           </div>
 
           <div className="space-y-4">
@@ -90,7 +90,7 @@ export function CheckIn({ standalone = false }: CheckInProps) {
                 value={code}
                 onChange={(e) => setCode(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder="Código de miembro"
+                placeholder="Tarjeta, credencial o código"
                 className="w-full px-4 py-3 text-lg border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100"
                 autoFocus
               />
@@ -113,13 +113,13 @@ export function CheckIn({ standalone = false }: CheckInProps) {
 
           {!feedback && (
             <div className="mt-6 p-4 rounded-lg border-2 bg-gray-50 border-gray-300">
-              <p className="text-center text-gray-500">Esperando escaneo...</p>
+              <p className="text-center text-gray-500">Esperando tarjeta o código...</p>
             </div>
           )}
         </div>
 
         <div className="mt-4 text-center text-sm text-gray-500">
-          <p>Presiona Enter después de escanear o escribir el código</p>
+          <p>Si escribes el código a mano, presiona Enter al terminar</p>
         </div>
       </div>
     </div>
