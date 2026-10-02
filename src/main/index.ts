@@ -14,6 +14,9 @@ import type {
   CheckInResult,
   AddSaleResult,
   ImportSummary,
+  ReceptionMember,
+  ReceptionState,
+  SecondaryWindow,
   BusinessConfig,
   AppData
 } from '../shared/types'
@@ -22,7 +25,8 @@ import {
   normalizeDateString,
   addDaysToDateString,
   daysBetweenDateStrings,
-  isMembershipExpired
+  isMembershipExpired,
+  getMemberStatus
 } from '../shared/dates'
 import {
   parseCsv,
@@ -201,6 +205,7 @@ function saveData(): void {
     }
     fs.renameSync(tmpPath, dataPath)
     log.info('Data saved')
+    notifyDataChanged()
   } catch (error) {
     log.error('Error saving data:', error)
   }
@@ -291,6 +296,14 @@ function generateId(): string {
 
 let mainWindow: BrowserWindow | null = null
 let checkInWindow: BrowserWindow | null = null
+let receptionWindow: BrowserWindow | null = null
+
+// La Recepción muestra miembros y asistencias en vivo; se refresca cada vez que se guardan datos
+function notifyDataChanged(): void {
+  if (receptionWindow && !receptionWindow.isDestroyed()) {
+    receptionWindow.webContents.send('data-changed')
+  }
+}
 
 function createWindow(): void {
   mainWindow = new BrowserWindow({
@@ -359,6 +372,10 @@ function createWindow(): void {
           label: 'Abrir Check-In',
           click: () => createCheckInWindow()
         },
+        {
+          label: 'Abrir Recepción',
+          click: () => createReceptionWindow()
+        },
         { type: 'separator' },
         { role: 'minimize' },
         { role: 'close' }
@@ -387,24 +404,28 @@ function createWindow(): void {
   }
 }
 
-function createCheckInWindow(): void {
-  if (checkInWindow) {
-    if (checkInWindow.isMinimized()) checkInWindow.restore()
-    checkInWindow.show()
-    checkInWindow.focus()
-    return
-  }
+interface SecondaryWindowOptions {
+  title: string
+  width: number
+  height: number
+  minWidth: number
+  minHeight: number
+  // Nombre del preload y de la página HTML (p. ej. 'checkin' → preload/checkin.js y checkin.html)
+  entry: SecondaryWindow
+}
 
-  checkInWindow = new BrowserWindow({
-    width: 600,
-    height: 500,
-    minWidth: 500,
-    minHeight: 400,
+// Ventanas auxiliares (Check-In, Recepción): preload mínimo, sandbox y sin DevTools en producción
+function createSecondaryWindow(options: SecondaryWindowOptions, onClosed: () => void): BrowserWindow {
+  const win = new BrowserWindow({
+    width: options.width,
+    height: options.height,
+    minWidth: options.minWidth,
+    minHeight: options.minHeight,
     show: false,
     autoHideMenuBar: true,
-    title: 'Check-In',
+    title: options.title,
     webPreferences: {
-      preload: join(__dirname, '../preload/checkin.js'),
+      preload: join(__dirname, `../preload/${options.entry}.js`),
       sandbox: true,
       contextIsolation: true,
       nodeIntegration: false,
@@ -412,25 +433,104 @@ function createCheckInWindow(): void {
     }
   })
 
-  checkInWindow.on('ready-to-show', () => {
-    checkInWindow?.show()
-    log.info('Check-in window shown')
+  win.on('ready-to-show', () => {
+    win.show()
+    log.info(`${options.title} window shown`)
   })
 
-  checkInWindow.on('closed', () => {
-    checkInWindow = null
-    log.info('Check-in window closed')
+  win.on('closed', () => {
+    onClosed()
+    log.info(`${options.title} window closed`)
   })
 
-  checkInWindow.webContents.setWindowOpenHandler(() => {
+  win.webContents.setWindowOpenHandler(() => {
     return { action: 'deny' }
   })
 
   if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
-    checkInWindow.loadURL(process.env['ELECTRON_RENDERER_URL'] + '/checkin.html')
+    win.loadURL(`${process.env['ELECTRON_RENDERER_URL']}/${options.entry}.html`)
   } else {
-    checkInWindow.loadFile(join(__dirname, '../renderer/checkin.html'))
+    win.loadFile(join(__dirname, `../renderer/${options.entry}.html`))
   }
+
+  return win
+}
+
+function focusWindow(win: BrowserWindow): void {
+  if (win.isMinimized()) win.restore()
+  win.show()
+  win.focus()
+}
+
+function createCheckInWindow(): void {
+  if (checkInWindow) {
+    focusWindow(checkInWindow)
+    return
+  }
+  checkInWindow = createSecondaryWindow(
+    { title: 'Check-In', width: 600, height: 500, minWidth: 500, minHeight: 400, entry: 'checkin' },
+    () => { checkInWindow = null }
+  )
+}
+
+function createReceptionWindow(): void {
+  if (receptionWindow) {
+    focusWindow(receptionWindow)
+    return
+  }
+  receptionWindow = createSecondaryWindow(
+    { title: 'Recepción', width: 1100, height: 720, minWidth: 820, minHeight: 520, entry: 'reception' },
+    () => { receptionWindow = null }
+  )
+}
+
+function getReceptionState(): ReceptionState {
+  const today = toLocalDateString()
+  const membershipNames = new Map(data.memberships.map(m => [m.id, m.name]))
+
+  const members: ReceptionMember[] = data.members
+    .map(member => ({
+      id: member.id,
+      code: member.code,
+      name: member.name,
+      phone: member.phone,
+      membershipName: membershipNames.get(member.membershipId) ?? 'Sin membresía',
+      endDate: member.endDate,
+      status: getMemberStatus(member, today)
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name, 'es'))
+
+  const todayAttendances = data.attendances
+    .filter(a => toLocalDateString(new Date(a.timestamp)) === today)
+    .sort((a, b) => b.timestamp.localeCompare(a.timestamp))
+
+  return { members, todayAttendances }
+}
+
+// Reglas comunes para el check-in del kiosco (por código) y de Recepción (por miembro)
+function performCheckIn(member: Member): CheckInResult {
+  if (member.status === 'frozen') return { status: 'frozen', memberName: member.name }
+  if (isMembershipExpired(member)) return { status: 'expired', memberName: member.name }
+
+  const now = Date.now()
+  const hasRecentCheckIn = data.attendances.some(
+    a => a.memberId === member.id && now - new Date(a.timestamp).getTime() < DUPLICATE_CHECK_IN_WINDOW_MS
+  )
+  if (hasRecentCheckIn) return { status: 'duplicate', memberName: member.name }
+
+  const attendance: Attendance = {
+    id: generateId(),
+    memberId: member.id,
+    memberName: member.name,
+    timestamp: new Date(now).toISOString()
+  }
+
+  data.attendances.push(attendance)
+  saveData()
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('attendance-recorded')
+  }
+  return { status: 'success', memberName: member.name }
 }
 
 app.whenReady().then(() => {
@@ -806,29 +906,20 @@ app.whenReady().then(() => {
     const member = findMemberByCode(code)
     if (member === 'ambiguous') return { status: 'ambiguous' }
     if (!member) return { status: 'not_found' }
+    return performCheckIn(member)
+  })
 
-    if (member.status === 'frozen') return { status: 'frozen', memberName: member.name }
-    if (isMembershipExpired(member)) return { status: 'expired', memberName: member.name }
+  ipcMain.handle('reception-get-state', (): ReceptionState => getReceptionState())
 
-    const now = Date.now()
-    const hasRecentCheckIn = data.attendances.some(
-      a => a.memberId === member.id && now - new Date(a.timestamp).getTime() < DUPLICATE_CHECK_IN_WINDOW_MS
-    )
-    if (hasRecentCheckIn) return { status: 'duplicate', memberName: member.name }
+  ipcMain.handle('reception-check-in', (_event, memberId: string): CheckInResult => {
+    const member = data.members.find(m => m.id === memberId)
+    if (!member) return { status: 'not_found' }
+    return performCheckIn(member)
+  })
 
-    const attendance: Attendance = {
-      id: generateId(),
-      memberId: member.id,
-      memberName: member.name,
-      timestamp: new Date(now).toISOString()
-    }
-
-    data.attendances.push(attendance)
-    saveData()
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('attendance-recorded')
-    }
-    return { status: 'success', memberName: member.name }
+  ipcMain.handle('open-window', (_event, kind: SecondaryWindow) => {
+    if (kind === 'checkin') createCheckInWindow()
+    else if (kind === 'reception') createReceptionWindow()
   })
 
   app.on('browser-window-created', (_, window) => {

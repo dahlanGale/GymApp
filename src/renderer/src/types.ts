@@ -9,6 +9,9 @@ export type {
   Attendance,
   CheckInResult,
   ImportSummary,
+  ReceptionMember,
+  ReceptionState,
+  SecondaryWindow,
   BusinessConfig,
   AppData
 } from '../../shared/types'

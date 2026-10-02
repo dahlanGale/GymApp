@@ -12,7 +12,6 @@ interface MembersProps {
 }
 
 export function Members({ data, updateData }: MembersProps) {
-  const [search, setSearch] = useState('')
   const [showModal, setShowModal] = useState(false)
   const [editingMember, setEditingMember] = useState<Member | null>(null)
   const [credentialMember, setCredentialMember] = useState<Member | null>(null)
@@ -26,12 +25,6 @@ export function Members({ data, updateData }: MembersProps) {
     membershipId: '',
     startDate: toLocalDateString()
   })
-
-  const filteredMembers = data.members.filter(m =>
-    m.name.toLowerCase().includes(search.toLowerCase()) ||
-    m.phone.includes(search) ||
-    m.code.includes(search.trim().toUpperCase())
-  )
 
   const membersColumns: ColumnDef<Member>[] = [
     {
@@ -159,20 +152,13 @@ export function Members({ data, updateData }: MembersProps) {
         <h2 className="text-xl font-semibold text-gray-800">Miembros</h2>
       </header>
       <div className="p-6">
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
-          <div className="w-full sm:w-72">
-            <Input
-              type="text"
-              placeholder="Buscar miembro..."
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-            />
-          </div>
+        {/* La tabla ya trae su buscador (nombre, código, teléfono, email…) */}
+        <div className="flex justify-end mb-6">
           <Button onClick={() => setShowModal(true)}>
             + Nuevo Miembro
           </Button>
         </div>
-        <Table data={filteredMembers} columns={membersColumns} searchPlaceholder="Buscar miembro..." />
+        <Table data={data.members} columns={membersColumns} searchPlaceholder="Buscar por nombre, código o teléfono..." />
       </div>
 
       <Modal open={showModal} onClose={() => setShowModal(false)} title={editingMember ? 'Editar Miembro' : 'Nuevo Miembro'}>

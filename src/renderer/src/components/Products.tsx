@@ -9,15 +9,9 @@ interface ProductsProps {
 }
 
 export function Products({ data, updateData }: ProductsProps) {
-  const [search, setSearch] = useState('')
   const [showModal, setShowModal] = useState(false)
   const [editingProduct, setEditingProduct] = useState<Product | null>(null)
   const [form, setForm] = useState({ name: '', category: '', price: 0, stock: 0 })
-
-  const filteredProducts = data.products.filter(p =>
-    p.name.toLowerCase().includes(search.toLowerCase()) ||
-    p.category.toLowerCase().includes(search.toLowerCase())
-  )
 
   const productsColumns: ColumnDef<Product>[] = [
     { accessorKey: 'name', header: 'Nombre' },
@@ -81,19 +75,12 @@ export function Products({ data, updateData }: ProductsProps) {
         <h2 className="text-xl font-semibold text-gray-800">Productos</h2>
       </header>
       <div className="p-6">
-        <div className="flex justify-between items-center mb-6">
-          <Input
-            type="text"
-            placeholder="Buscar producto..."
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            className="w-64"
-          />
+        <div className="flex justify-end mb-6">
           <Button onClick={() => setShowModal(true)}>
             + Nuevo Producto
           </Button>
         </div>
-        <Table data={filteredProducts} columns={productsColumns} searchPlaceholder="Buscar producto..." />
+        <Table data={data.products} columns={productsColumns} searchPlaceholder="Buscar por nombre o categoría..." />
       </div>
 
       <Modal open={showModal} onClose={() => setShowModal(false)} title={editingProduct ? 'Editar Producto' : 'Nuevo Producto'}>
