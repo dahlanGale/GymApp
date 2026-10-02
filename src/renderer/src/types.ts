@@ -9,6 +9,7 @@ export type {
   Attendance,
   CheckInResult,
   ImportSummary,
+  LinkNfcResult,
   ReceptionMember,
   ReceptionState,
   SecondaryWindow,

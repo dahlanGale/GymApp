@@ -13,6 +13,8 @@ export interface Member {
   status: 'active' | 'expired' | 'frozen'
   // Fecha local (YYYY-MM-DD) en que se congeló; al descongelar se recorre endDate esos días
   frozenAt?: string
+  // Número de serie de su tarjeta NFC, tal como lo escribe el lector (normalizado: mayúsculas, sin espacios ni ':')
+  nfcTag?: string
   createdAt: string
 }
 
@@ -81,6 +83,10 @@ export interface Attendance {
   timestamp: string
 }
 
+export type LinkNfcResult =
+  | { ok: true; member: Member }
+  | { ok: false; error: string }
+
 export type AddSaleResult =
   | { ok: true; sale: Sale }
   | { ok: false; error: string }
@@ -102,6 +108,8 @@ export interface ImportSummary {
 export interface ReceptionMember {
   id: string
   code: string
+  // Vacío si no tiene tarjeta; sirve para que acercar la tarjeta en Recepción encuentre al miembro
+  nfcTag: string
   name: string
   phone: string
   membershipName: string
