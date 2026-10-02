@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
+import type { IpcRendererEvent } from 'electron'
 
 import type {
   Member,
@@ -11,7 +12,8 @@ import type {
   AppData,
   AddSaleResult,
   ImportSummary,
-  SecondaryWindow
+  SecondaryWindow,
+  UpdateState
 } from '../shared/types'
 
 const api = {
@@ -44,6 +46,17 @@ const api = {
   importCsv: (csvData: { type: 'members' | 'products' | 'memberships', data: string }): Promise<ImportSummary> =>
     ipcRenderer.invoke('import-csv', csvData),
   openWindow: (kind: SecondaryWindow): Promise<void> => ipcRenderer.invoke('open-window', kind),
+  getAppVersion: (): Promise<string> => ipcRenderer.invoke('get-app-version'),
+  getUpdateState: (): Promise<UpdateState> => ipcRenderer.invoke('get-update-state'),
+  installUpdate: (): Promise<void> => ipcRenderer.invoke('install-update'),
+  openUpdateDownload: (): Promise<void> => ipcRenderer.invoke('open-update-download'),
+  onUpdateState: (callback: (state: UpdateState) => void): (() => void) => {
+    const listener = (_event: IpcRendererEvent, state: UpdateState): void => callback(state)
+    ipcRenderer.on('update-state', listener)
+    return () => {
+      ipcRenderer.removeListener('update-state', listener)
+    }
+  },
   // Se dispara cada vez que el proceso main guarda datos (check-ins del kiosco o de Recepción incluidos)
   onDataChanged: (callback: () => void): (() => void) => {
     const listener = (): void => callback()

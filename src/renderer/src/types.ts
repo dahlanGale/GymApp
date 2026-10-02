@@ -12,6 +12,7 @@ export type {
   ReceptionMember,
   ReceptionState,
   SecondaryWindow,
+  UpdateState,
   BusinessConfig,
   AppData
 } from '../../shared/types'

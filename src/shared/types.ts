@@ -117,6 +117,14 @@ export interface ReceptionState {
 
 export type SecondaryWindow = 'checkin' | 'reception'
 
+// Estado de las actualizaciones automáticas que ve la ventana principal.
+// En Windows se descargan e instalan solas; en macOS (sin firma de Apple) solo se avisa con un enlace de descarga.
+export type UpdateState =
+  | { status: 'idle' }
+  | { status: 'available'; version: string }
+  | { status: 'downloading'; version: string; percent: number }
+  | { status: 'downloaded'; version: string }
+
 export type CheckInResult =
   | { status: 'not_found' }
   | { status: 'ambiguous' }

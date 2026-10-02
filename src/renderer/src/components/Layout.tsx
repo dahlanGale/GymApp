@@ -1,4 +1,6 @@
+import { useEffect, useState } from 'react'
 import { Page } from '../types'
+import { UpdateBanner } from './UpdateBanner'
 
 interface LayoutProps {
   page: Page
@@ -7,6 +9,14 @@ interface LayoutProps {
 }
 
 export function Layout({ page, setPage, children }: LayoutProps) {
+  const [version, setVersion] = useState('')
+
+  useEffect(() => {
+    window.api.getAppVersion()
+      .then(setVersion)
+      .catch((error: unknown) => console.error('Error loading app version:', error))
+  }, [])
+
   return (
     <div className="flex min-h-screen">
       {/* Fijo a la altura de la ventana, para que los botones de Ventanas siempre estén visibles */}
@@ -102,8 +112,10 @@ export function Layout({ page, setPage, children }: LayoutProps) {
             Abrir Check-In (kiosco)
           </button>
         </div>
+        {version && <div className="px-4 pt-3 text-xs text-white/40">Versión {version}</div>}
       </aside>
       <main className="flex-1 flex flex-col min-w-0">
+        <UpdateBanner />
         {children}
       </main>
     </div>
