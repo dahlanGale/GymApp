@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { AppData } from '../types'
 import { Table, StatCard, Card } from './UI'
 import { ColumnDef } from '@tanstack/react-table'
+import { WeeklyAttendance } from './WeeklyAttendance'
 import { toLocalDateString, getMemberStatus, isValidDateString } from '../utils/dates'
 
 interface DashboardProps {
@@ -146,6 +147,7 @@ export function Dashboard({ data }: DashboardProps) {
             )}
           </div>
         </div>
+        <WeeklyAttendance data={data} />
       </div>
     </>
   )

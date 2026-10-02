@@ -1,5 +1,6 @@
 import type { Api } from '../../preload'
 import type { CheckInApi } from '../../preload/checkin'
+import type { ReceptionApi } from '../../preload/reception'
 
 declare global {
   interface Window {
@@ -7,6 +8,8 @@ declare global {
     api: Api
     // Ventana de check-in (src/preload/checkin.ts)
     checkInApi: CheckInApi
+    // Ventana de recepción (src/preload/reception.ts)
+    receptionApi: ReceptionApi
   }
 }
 

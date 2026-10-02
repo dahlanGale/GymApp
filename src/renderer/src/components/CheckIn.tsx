@@ -1,30 +1,13 @@
 import { useState, useEffect, useRef } from 'react'
-import { CheckInResult } from '../types'
+import { CheckInFeedbackType, getFeedbackFromResult } from '../utils/checkInFeedback'
 
-type FeedbackType = 'success' | 'error' | 'warning' | null
+type FeedbackType = CheckInFeedbackType | null
 
 interface CheckInProps {
   standalone?: boolean
 }
 
 const FEEDBACK_DURATION_MS = 2000
-
-function getFeedbackFromResult(result: CheckInResult): { type: Exclude<FeedbackType, null>; message: string } {
-  switch (result.status) {
-    case 'success':
-      return { type: 'success', message: `¡Bienvenido ${result.memberName}!` }
-    case 'duplicate':
-      return { type: 'warning', message: `${result.memberName} - Entrada ya registrada` }
-    case 'expired':
-      return { type: 'warning', message: `${result.memberName} - Membresía Expirada` }
-    case 'frozen':
-      return { type: 'warning', message: `${result.memberName} - Membresía Congelada` }
-    case 'ambiguous':
-      return { type: 'error', message: 'Código compartido por varios miembros, usa tu código de miembro' }
-    case 'not_found':
-      return { type: 'error', message: 'Miembro no encontrado' }
-  }
-}
 
 export function CheckIn({ standalone = false }: CheckInProps) {
   const [code, setCode] = useState('')
