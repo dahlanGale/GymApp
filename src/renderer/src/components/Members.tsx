@@ -16,7 +16,9 @@ export function Members({ data, updateData }: MembersProps) {
   const [showModal, setShowModal] = useState(false)
   const [editingMember, setEditingMember] = useState<Member | null>(null)
   const [credentialMember, setCredentialMember] = useState<Member | null>(null)
-  const [historyMember, setHistoryMember] = useState<Member | null>(null)
+  // Se guarda el id para que el historial muestre siempre los datos actuales del miembro
+  const [historyMemberId, setHistoryMemberId] = useState<string | null>(null)
+  const historyMember = data.members.find(m => m.id === historyMemberId) ?? null
   const [form, setForm] = useState({
     name: '',
     phone: '',
@@ -64,7 +66,7 @@ export function Members({ data, updateData }: MembersProps) {
         const status = getMemberStatus(row.original)
         return (
         <div className="flex gap-2">
-          <Button size="sm" variant="secondary" onClick={() => setHistoryMember(row.original)}>Historial</Button>
+          <Button size="sm" variant="secondary" onClick={() => setHistoryMemberId(row.original.id)}>Historial</Button>
           <Button size="sm" variant="secondary" onClick={() => setCredentialMember(row.original)}>Credencial</Button>
           {status === 'active' && (
             <Button size="sm" variant="secondary" onClick={() => handleFreeze(row.original)}>Congelar</Button>
@@ -219,7 +221,7 @@ export function Members({ data, updateData }: MembersProps) {
       <MemberHistory
         member={historyMember}
         data={data}
-        onClose={() => setHistoryMember(null)}
+        onClose={() => setHistoryMemberId(null)}
       />
 
       <MemberCredential
