@@ -20,7 +20,8 @@ export default defineConfig({
       rollupOptions: {
         input: {
           index: resolve(__dirname, 'src/preload/index.ts'),
-          checkin: resolve(__dirname, 'src/preload/checkin.ts')
+          checkin: resolve(__dirname, 'src/preload/checkin.ts'),
+          reception: resolve(__dirname, 'src/preload/reception.ts')
         }
       }
     }
@@ -31,7 +32,8 @@ export default defineConfig({
       rollupOptions: {
         input: {
           index: resolve(__dirname, 'src/renderer/index.html'),
-          checkin: resolve(__dirname, 'src/renderer/checkin.html')
+          checkin: resolve(__dirname, 'src/renderer/checkin.html'),
+          reception: resolve(__dirname, 'src/renderer/reception.html')
         }
       }
     },

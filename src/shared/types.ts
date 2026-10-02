@@ -98,6 +98,25 @@ export interface ImportSummary {
   error?: string
 }
 
+// Datos mínimos que necesita la ventana de Recepción; el estado ya viene calculado por fecha
+export interface ReceptionMember {
+  id: string
+  code: string
+  name: string
+  phone: string
+  membershipName: string
+  endDate: string
+  status: Member['status']
+}
+
+export interface ReceptionState {
+  members: ReceptionMember[]
+  // Asistencias de hoy (fecha local), de la más reciente a la más antigua
+  todayAttendances: Attendance[]
+}
+
+export type SecondaryWindow = 'checkin' | 'reception'
+
 export type CheckInResult =
   | { status: 'not_found' }
   | { status: 'ambiguous' }
