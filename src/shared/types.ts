@@ -88,7 +88,14 @@ export type AddSaleResult =
 export interface ImportSummary {
   data: AppData
   added: number
+  // Registros que no se agregaron (ya existían o no tenían nombre)
   skipped: number
+  // Cuántos de los omitidos fueron por ya existir
+  duplicates?: number
+  // Avisos por fila: valores que no se pudieron interpretar y cómo se resolvieron
+  warnings?: string[]
+  // Error que impidió importar el archivo completo
+  error?: string
 }
 
 export type CheckInResult =

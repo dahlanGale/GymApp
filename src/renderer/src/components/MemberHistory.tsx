@@ -17,11 +17,14 @@ const STATUS_BADGES: Record<Member['status'], { variant: 'success' | 'danger' | 
   frozen: { variant: 'warning', label: 'Congelado' },
 }
 
+// La búsqueda filtra sobre el valor de la columna, así que se usa la fecha como se muestra;
+// el orden sigue usando el timestamp ISO para no ordenar texto
 const attendanceColumns: ColumnDef<Attendance>[] = [
   {
-    accessorKey: 'timestamp',
+    id: 'timestamp',
+    accessorFn: attendance => new Date(attendance.timestamp).toLocaleString(),
     header: 'Fecha y Hora',
-    cell: info => new Date(info.getValue() as string).toLocaleString(),
+    sortingFn: (a, b) => a.original.timestamp.localeCompare(b.original.timestamp),
   },
 ]
 
@@ -38,9 +41,10 @@ const membershipColumns: ColumnDef<MembershipSale>[] = [
 
 const purchaseColumns: ColumnDef<Sale>[] = [
   {
-    accessorKey: 'date',
+    id: 'date',
+    accessorFn: sale => new Date(sale.date).toLocaleString(),
     header: 'Fecha',
-    cell: info => new Date(info.getValue() as string).toLocaleString(),
+    sortingFn: (a, b) => a.original.date.localeCompare(b.original.date),
   },
   {
     id: 'items',

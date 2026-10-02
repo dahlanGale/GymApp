@@ -17,6 +17,23 @@ import type {
   BusinessConfig,
   AppData
 } from '../shared/types'
+import {
+  toLocalDateString,
+  normalizeDateString,
+  addDaysToDateString,
+  daysBetweenDateStrings,
+  isMembershipExpired
+} from '../shared/dates'
+import {
+  parseCsv,
+  normalizeHeader,
+  parseCsvNumber,
+  parseCsvDate,
+  parseCsvBoolean,
+  parseCsvMemberStatus,
+  parseCsvPromotionType,
+  sameText
+} from './csv'
 
 log.initialize()
 log.info('Application starting...')
@@ -249,122 +266,6 @@ function mergeById<T extends { id: string }>(
   return { merged, added: merged.length - existing.length, skipped }
 }
 
-function detectCsvDelimiter(text: string): ',' | ';' {
-  // Excel en español suele exportar con punto y coma
-  const firstLine = text.split(/\r?\n/, 1)[0] ?? ''
-  const commas = (firstLine.match(/,/g) ?? []).length
-  const semicolons = (firstLine.match(/;/g) ?? []).length
-  return semicolons > commas ? ';' : ','
-}
-
-// RFC 4180: un campo entre comillas puede contener delimitadores, saltos de línea y comillas escapadas ("")
-function parseCsv(text: string): string[][] {
-  const input = text.replace(/^\uFEFF/, '')
-  const delimiter = detectCsvDelimiter(input)
-  const rows: string[][] = []
-  let row: string[] = []
-  let field = ''
-  let inQuotes = false
-
-  for (let i = 0; i < input.length; i++) {
-    const char = input[i]
-
-    if (inQuotes) {
-      if (char === '"' && input[i + 1] === '"') {
-        field += '"'
-        i++
-      } else if (char === '"') {
-        inQuotes = false
-      } else {
-        field += char
-      }
-      continue
-    }
-
-    if (char === '"') {
-      inQuotes = true
-    } else if (char === delimiter) {
-      row.push(field)
-      field = ''
-    } else if (char === '\n' || char === '\r') {
-      if (char === '\r' && input[i + 1] === '\n') i++
-      row.push(field)
-      rows.push(row)
-      row = []
-      field = ''
-    } else {
-      field += char
-    }
-  }
-
-  if (field !== '' || row.length > 0) {
-    row.push(field)
-    rows.push(row)
-  }
-
-  return rows.filter(values => values.some(value => value.trim() !== ''))
-}
-
-const CSV_MEMBER_STATUSES: Record<string, Member['status']> = {
-  active: 'active',
-  activo: 'active',
-  expired: 'expired',
-  expirado: 'expired',
-  frozen: 'frozen',
-  congelado: 'frozen'
-}
-
-function parseMemberStatus(value: string | undefined): Member['status'] {
-  return CSV_MEMBER_STATUSES[(value ?? '').trim().toLowerCase()] ?? 'active'
-}
-
-const PROMOTION_TYPES: NonNullable<Membership['promotionType']>[] = ['new_client', 'couple', 'no_maintenance']
-
-function parsePromotionType(value: string | undefined): Membership['promotionType'] {
-  const normalized = (value ?? '').trim().toLowerCase()
-  return PROMOTION_TYPES.find(type => type === normalized) ?? null
-}
-
-function parseCsvBoolean(value: string | undefined): boolean {
-  return ['true', '1', 'si', 'sí', 'yes'].includes((value ?? '').trim().toLowerCase())
-}
-
-function getLocalDateString(date: Date): string {
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
-  return `${year}-${month}-${day}`
-}
-
-function isDateString(value: string | undefined): value is string {
-  return !!value && /^\d{4}-\d{2}-\d{2}$/.test(value)
-}
-
-function parseDateString(value: string): Date {
-  const [year, month, day] = value.split('-').map(Number)
-  return new Date(year, month - 1, day)
-}
-
-function addDaysToDateString(value: string, days: number): string {
-  const date = parseDateString(value)
-  date.setDate(date.getDate() + days)
-  return getLocalDateString(date)
-}
-
-function daysBetweenDateStrings(from: string, to: string): number {
-  const [fromYear, fromMonth, fromDay] = from.split('-').map(Number)
-  const [toYear, toMonth, toDay] = to.split('-').map(Number)
-  const msPerDay = 1000 * 60 * 60 * 24
-  return Math.round((Date.UTC(toYear, toMonth - 1, toDay) - Date.UTC(fromYear, fromMonth - 1, fromDay)) / msPerDay)
-}
-
-function isMembershipExpired(member: Member): boolean {
-  if (member.status === 'expired') return true
-  const endDate = member.endDate?.slice(0, 10)
-  if (!endDate || !/^\d{4}-\d{2}-\d{2}$/.test(endDate)) return true
-  return endDate < getLocalDateString(new Date())
-}
-
 function findMemberByCode(code: string): Member | null | 'ambiguous' {
   const normalized = code.trim()
   if (!normalized) return null
@@ -537,7 +438,7 @@ app.whenReady().then(() => {
     const member = data.members.find(m => m.id === id)
     if (!member || member.status === 'frozen' || isMembershipExpired(member)) return null
     member.status = 'frozen'
-    member.frozenAt = getLocalDateString(new Date())
+    member.frozenAt = toLocalDateString()
     saveData()
     return member
   })
@@ -547,10 +448,11 @@ app.whenReady().then(() => {
     if (!member || member.status !== 'frozen') return null
 
     // Se devuelven los días congelados para que el miembro no pierda tiempo de su membresía
-    const today = getLocalDateString(new Date())
-    const endDate = member.endDate?.slice(0, 10)
-    if (isDateString(member.frozenAt) && isDateString(endDate)) {
-      const frozenDays = daysBetweenDateStrings(member.frozenAt, today)
+    const today = toLocalDateString()
+    const endDate = normalizeDateString(member.endDate)
+    const frozenAt = normalizeDateString(member.frozenAt)
+    if (frozenAt && endDate) {
+      const frozenDays = daysBetweenDateStrings(frozenAt, today)
       if (frozenDays > 0) member.endDate = addDaysToDateString(endDate, frozenDays)
     }
 
@@ -718,69 +620,158 @@ app.whenReady().then(() => {
   })
 
   ipcMain.handle('import-csv', (_event, csvData: { type: 'members' | 'products' | 'memberships', data: string }): ImportSummary => {
-    const [headerRow, ...rows] = parseCsv(csvData.data)
+    const { type } = csvData
+    if (type !== 'members' && type !== 'products' && type !== 'memberships') {
+      return { data, added: 0, skipped: 0, error: 'Tipo de importación no válido.' }
+    }
+
+    const { delimiter, rows: allRows, unclosedQuote } = parseCsv(csvData.data)
+    if (unclosedQuote) {
+      // Una comilla sin cerrar se traga el resto del archivo; es más seguro no importar nada
+      return {
+        data,
+        added: 0,
+        skipped: 0,
+        error: 'El archivo tiene un campo entre comillas que nunca se cierra. Revíselo y vuelva a intentar.'
+      }
+    }
+
+    const [headerRow, ...rows] = allRows
     if (!headerRow || rows.length === 0) return { data, added: 0, skipped: 0 }
 
-    const headers = headerRow.map(h => h.trim().toLowerCase())
+    const headers = headerRow.map(normalizeHeader)
+    if (!headers.includes('name')) {
+      return { data, added: 0, skipped: 0, error: 'El archivo no tiene una columna "name" o "nombre".' }
+    }
+
+    const today = toLocalDateString()
+    const warnings: string[] = []
     let added = 0
     let skipped = 0
+    let duplicates = 0
 
-    for (const values of rows) {
+    const readNumber = (record: Record<string, string>, field: string, label: string, rowNumber: number): number | null => {
+      const raw = record[field] ?? ''
+      const value = parseCsvNumber(raw, delimiter)
+      if (raw !== '' && value === null) {
+        warnings.push(`Fila ${rowNumber}: ${label} "${raw}" no es un número; se usó el valor por defecto.`)
+      }
+      return value
+    }
+
+    rows.forEach((values, index) => {
+      // La fila 1 es el encabezado
+      const rowNumber = index + 2
       const record: Record<string, string> = {}
-      headers.forEach((header, index) => {
-        record[header] = (values[index] ?? '').trim()
+      headers.forEach((header, column) => {
+        record[header] = (values[column] ?? '').trim()
       })
+      const name = record.name ?? ''
 
       // Una fila sin nombre no se puede identificar después; se omite
-      if (!record.name) {
+      if (!name) {
         skipped++
-        continue
+        return
       }
 
-      if (csvData.type === 'members') {
+      if (type === 'members') {
+        const code = normalizeMemberCode(record.code ?? '')
+        const phone = record.phone ?? ''
+        const email = record.email ?? ''
+        // Mismo código, o mismo nombre con el mismo teléfono/email (si el archivo los trae)
+        const isDuplicate = data.members.some(m =>
+          (code !== '' && m.code === code) ||
+          (sameText(m.name, name) && (phone === '' || m.phone === phone) && (email === '' || sameText(m.email, email)))
+        )
+        if (isDuplicate) {
+          skipped++
+          duplicates++
+          return
+        }
+
+        const startDate = parseCsvDate(record.startdate)
+        if (record.startdate && !startDate) {
+          warnings.push(`Fila ${rowNumber}: fecha de inicio "${record.startdate}" no válida; se usó la fecha de hoy.`)
+        }
+        const endDate = parseCsvDate(record.enddate)
+        if (record.enddate && !endDate) {
+          warnings.push(`Fila ${rowNumber}: fecha de vencimiento "${record.enddate}" no válida; el miembro quedó sin vencimiento.`)
+        }
+
+        const parsedStatus = parseCsvMemberStatus(record.status)
+        if (parsedStatus === null) {
+          warnings.push(`Fila ${rowNumber}: estado "${record.status}" no reconocido; el estado se decide por la fecha de vencimiento.`)
+        }
+        const status = parsedStatus ?? 'active'
+
+        // La columna de membresía puede traer el id o el nombre
+        const membershipValue = record.membershipid ?? ''
+        const membership = membershipValue
+          ? data.memberships.find(m => m.id === membershipValue || sameText(m.name, membershipValue))
+          : undefined
+        if (membershipValue && !membership) {
+          warnings.push(`Fila ${rowNumber}: membresía "${membershipValue}" no existe; el miembro quedó sin membresía.`)
+        }
+
         const member: Member = {
           id: generateId(),
-          code: normalizeMemberCode(record.code || ''),
-          name: record.name,
-          phone: record.phone || '',
-          email: record.email || '',
-          membershipId: record.membershipid || '',
-          startDate: isDateString(record.startdate) ? record.startdate : getLocalDateString(new Date()),
-          endDate: isDateString(record.enddate) ? record.enddate : '',
-          status: parseMemberStatus(record.status),
+          code,
+          name,
+          phone,
+          email,
+          membershipId: membership?.id ?? '',
+          startDate: startDate ?? today,
+          endDate: endDate ?? '',
+          status,
+          // Sin fecha de congelamiento no se podrían devolver los días al descongelar
+          ...(status === 'frozen' ? { frozenAt: today } : {}),
           createdAt: new Date().toISOString()
         }
         data.members.push(member)
-      } else if (csvData.type === 'products') {
+        added++
+      } else if (type === 'products') {
+        const category = record.category ?? ''
+        if (data.products.some(p => sameText(p.name, name) && sameText(p.category, category))) {
+          skipped++
+          duplicates++
+          return
+        }
         const product: Product = {
           id: generateId(),
-          name: record.name,
-          category: record.category || '',
-          price: parseFloat(record.price) || 0,
-          stock: Math.max(0, parseInt(record.stock, 10) || 0)
+          name,
+          category,
+          price: readNumber(record, 'price', 'precio', rowNumber) ?? 0,
+          stock: Math.max(0, Math.round(readNumber(record, 'stock', 'stock', rowNumber) ?? 0))
         }
         data.products.push(product)
-      } else if (csvData.type === 'memberships') {
+        added++
+      } else {
+        if (data.memberships.some(m => sameText(m.name, name))) {
+          skipped++
+          duplicates++
+          return
+        }
+        const durationDays = readNumber(record, 'durationdays', 'duración', rowNumber)
         const membership: Membership = {
           id: generateId(),
-          name: record.name,
-          price: parseFloat(record.price) || 0,
-          durationDays: parseInt(record.durationdays, 10) || 30,
+          name,
+          price: readNumber(record, 'price', 'precio', rowNumber) ?? 0,
+          durationDays: durationDays !== null && durationDays > 0 ? Math.round(durationDays) : 30,
           hasPromotion: parseCsvBoolean(record.haspromotion),
-          promotionType: parsePromotionType(record.promotiontype),
-          promotionDiscount: parseFloat(record.promotiondiscount) || 0,
+          promotionType: parseCsvPromotionType(record.promotiontype),
+          promotionDiscount: readNumber(record, 'promotiondiscount', 'descuento', rowNumber) ?? 0,
           includesAnnualMaintenance: parseCsvBoolean(record.includesannualmaintenance)
         }
         data.memberships.push(membership)
+        added++
       }
-      added++
-    }
+    })
 
     if (added > 0) {
       ensureMemberCodes()
       saveData()
     }
-    return { data, added, skipped }
+    return { data, added, skipped, duplicates, warnings }
   })
 
   ipcMain.handle('check-in', (_event, code: string): CheckInResult => {
