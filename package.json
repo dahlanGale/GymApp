@@ -1,6 +1,6 @@
 {
   "name": "gym-pos",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Gym POS System with Membership Management",
   "main": "./out/main/index.js",
   "scripts": {
@@ -19,8 +19,16 @@
     "directories": {
       "output": "release"
     },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "dahlanGale",
+        "repo": "GymApp",
+        "releaseType": "draft"
+      }
+    ],
     "win": {
-      "target": "portable"
+      "target": "nsis"
     },
     "mac": {
       "target": [
@@ -30,10 +38,22 @@
             "arm64",
             "x64"
           ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
         }
       ],
       "category": "public.app-category.business",
       "identity": "-"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "deleteAppDataOnUninstall": false
     }
   },
   "devDependencies": {
@@ -53,6 +73,7 @@
     "vite": "^7.3.1"
   },
   "dependencies": {
-    "@tanstack/react-table": "^8.21.3"
+    "@tanstack/react-table": "^8.21.3",
+    "electron-updater": "^6.8.10"
   }
 }
