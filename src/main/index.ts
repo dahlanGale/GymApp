@@ -38,6 +38,7 @@ import {
   parseCsvPromotionType,
   sameText
 } from './csv'
+import { setupAutoUpdates } from './updates'
 
 log.initialize()
 log.info('Application starting...')
@@ -940,6 +941,7 @@ app.whenReady().then(() => {
   })
 
   createWindow()
+  setupAutoUpdates(() => mainWindow)
 
   if (loadWarning && mainWindow) {
     const warning = loadWarning
