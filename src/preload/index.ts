@@ -10,7 +10,8 @@ import type {
   BusinessConfig,
   AppData,
   AddSaleResult,
-  ImportSummary
+  ImportSummary,
+  SecondaryWindow
 } from '../shared/types'
 
 const api = {
@@ -42,6 +43,7 @@ const api = {
     ipcRenderer.invoke('import-data', data),
   importCsv: (csvData: { type: 'members' | 'products' | 'memberships', data: string }): Promise<ImportSummary> =>
     ipcRenderer.invoke('import-csv', csvData),
+  openWindow: (kind: SecondaryWindow): Promise<void> => ipcRenderer.invoke('open-window', kind),
   onAttendanceRecorded: (callback: () => void): (() => void) => {
     const listener = (): void => callback()
     ipcRenderer.on('attendance-recorded', listener)
