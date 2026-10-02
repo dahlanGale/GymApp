@@ -85,6 +85,7 @@ export function MemberHistory({ member, data, onClose }: MemberHistoryProps) {
         <div>
           <div className="text-gray-500">Código</div>
           <div className="font-mono font-medium text-gray-900">{member.code}</div>
+          <div className="text-xs text-gray-500">{member.nfcTag ? 'Con tarjeta NFC' : 'Sin tarjeta NFC'}</div>
         </div>
         <div>
           <div className="text-gray-500">Membresía</div>

@@ -5,13 +5,20 @@ import { CHECK_IN_FEEDBACK_COLORS, CheckInFeedbackType, getFeedbackFromResult } 
 import { MEMBER_STATUS_DISPLAY } from '../utils/memberStatus'
 import { formatTime } from '../utils/format'
 import { toLocalDateString } from '../utils/dates'
-import { normalizeText } from '../../../shared/text'
+import { normalizeNfcTag, normalizeText } from '../../../shared/text'
 
 // Con muchos miembros, la lista sin filtro se recorta para que la ventana siga siendo ágil
 const MAX_VISIBLE_MEMBERS = 100
 const FEEDBACK_DURATION_MS = 3000
 // Cada minuto se revisa si cambió el día, para no seguir mostrando las entradas de ayer
 const DAY_CHECK_INTERVAL_MS = 60 * 1000
+
+// Miembro cuyo código o tarjeta NFC coincide exactamente con lo escrito (o lo que escribió el lector)
+function findExactMatch(members: ReceptionMember[], search: string): ReceptionMember | undefined {
+  const code = normalizeText(search)
+  const tag = normalizeNfcTag(search)
+  return members.find(member => member.code.toLowerCase() === code || (member.nfcTag !== '' && member.nfcTag === tag))
+}
 
 export function Reception() {
   const [state, setState] = useState<ReceptionState>({ members: [], todayAttendances: [] })
@@ -76,21 +83,22 @@ export function Reception() {
     const query = normalizeText(search)
     if (!query) return state.members
     const digits = query.replace(/\D/g, '')
+    const tag = normalizeNfcTag(search)
     const matches = state.members.filter(member =>
       normalizeText(member.name).includes(query) ||
       member.code.toLowerCase().includes(query) ||
+      (member.nfcTag !== '' && member.nfcTag === tag) ||
       (digits.length > 0 && member.phone.replace(/\D/g, '').includes(digits))
     )
-    // Un código exacto (p. ej. escaneado de la credencial) va primero
-    const exact = matches.find(member => member.code.toLowerCase() === query)
+    // Un código exacto o una tarjeta NFC (escaneada o acercada al lector) va primero
+    const exact = findExactMatch(matches, search)
     return exact ? [exact, ...matches.filter(member => member !== exact)] : matches
   }, [state.members, search])
 
   // Miembro que Enter registraría: el del código exacto, o el único resultado de la búsqueda
   const enterTarget = useMemo(() => {
-    const query = normalizeText(search)
-    if (!query) return null
-    const exact = state.members.find(member => member.code.toLowerCase() === query)
+    if (!normalizeText(search)) return null
+    const exact = findExactMatch(state.members, search)
     if (exact) return exact
     return filteredMembers.length === 1 ? filteredMembers[0] : null
   }, [state.members, search, filteredMembers])
@@ -167,11 +175,11 @@ export function Reception() {
               value={search}
               onChange={e => setSearch(e.target.value)}
               onKeyDown={handleSearchKeyDown}
-              placeholder="Buscar por nombre, código o teléfono…"
+              placeholder="Buscar por nombre, código o teléfono, o acercar la tarjeta NFC…"
               className="w-full px-4 py-3 text-lg border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
             <p className="mt-2 text-xs text-gray-500">
-              Pulsa “Registrar entrada”, o Enter con el código exacto o cuando la búsqueda deje un solo miembro.
+              Pulsa “Registrar entrada”, o Enter con el código exacto o cuando la búsqueda deje un solo miembro. Con el cursor aquí, acercar una tarjeta NFC registra la entrada.
             </p>
           </div>
 
