@@ -2,16 +2,15 @@ import { useEffect, useRef, useState } from 'react'
 import { Member } from '../types'
 import { Button, Modal } from './UI'
 
+// Los datos de Miembros se refrescan solos con el aviso data-changed del proceso main
 interface NfcTagModalProps {
   member: Member | null
   onClose: () => void
-  // Se llama después de vincular o desvincular, para refrescar los datos
-  onChanged: () => void
 }
 
 // Vincula la tarjeta NFC del miembro. Los lectores USB tipo teclado escriben el número de la tarjeta
 // y presionan Enter solos, así que basta con acercarla con el cursor en el campo
-export function NfcTagModal({ member, onClose, onChanged }: NfcTagModalProps) {
+export function NfcTagModal({ member, onClose }: NfcTagModalProps) {
   const [value, setValue] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
@@ -21,8 +20,13 @@ export function NfcTagModal({ member, onClose, onChanged }: NfcTagModalProps) {
   useEffect(() => {
     setValue('')
     setError(null)
-    if (memberId) inputRef.current?.focus()
   }, [memberId])
+
+  // El campo se deshabilita mientras se guarda; se enfoca cuando vuelve a estar disponible,
+  // para que la siguiente tarjeta se lea sin tener que hacer clic
+  useEffect(() => {
+    if (memberId && !saving) inputRef.current?.focus()
+  }, [memberId, saving])
 
   if (!member) return null
 
@@ -34,10 +38,8 @@ export function NfcTagModal({ member, onClose, onChanged }: NfcTagModalProps) {
       if (!result.ok) {
         setError(result.error)
         setValue('')
-        inputRef.current?.focus()
         return
       }
-      onChanged()
       onClose()
     } catch (err: unknown) {
       console.error('Error linking NFC tag:', err)
@@ -49,9 +51,13 @@ export function NfcTagModal({ member, onClose, onChanged }: NfcTagModalProps) {
 
   const handleUnlink = async () => {
     if (!confirm(`¿Desvincular la tarjeta de ${member.name}? Ya no podrá entrar con ella.`)) return
-    await window.api.unlinkNfcTag(member.id)
-    onChanged()
-    onClose()
+    try {
+      await window.api.unlinkNfcTag(member.id)
+      onClose()
+    } catch (err: unknown) {
+      console.error('Error unlinking NFC tag:', err)
+      setError('No se pudo desvincular la tarjeta.')
+    }
   }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {

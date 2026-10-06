@@ -18,7 +18,7 @@ GymPOS es una aplicación de escritorio completa diseñada para gimnasios que ne
 - Búsqueda por nombre, código, teléfono o email (sin importar acentos ni mayúsculas)
 - Estado calculado por la fecha de vencimiento: Activo, Expirado o Congelado
 - **Credencial** imprimible con código de barras (Code 39) que se puede escanear en el check-in
-- **Tarjeta NFC**: con el botón **NFC** se vincula una tarjeta al miembro acercándola al lector; desde ahí también se reemplaza o se desvincula. Cada tarjeta solo puede estar vinculada a un miembro.
+- **Tarjeta NFC**: con el botón **NFC** se vincula una tarjeta al miembro acercándola al lector; desde ahí también se reemplaza o se desvincula. Cada tarjeta solo puede estar vinculada a un miembro, y no puede ser igual al código de otro miembro.
 - **Historial** por miembro: asistencias, membresías compradas y compras de productos
 - **Congelar / Descongelar**: al descongelar, el vencimiento se recorre los días que estuvo congelado
 
