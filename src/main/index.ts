@@ -162,7 +162,7 @@ function loadData(): void {
   const loaded = readDataFile(dataPath)
   if (loaded) {
     data = loaded
-    if (normalizeMembers()) saveData()
+    if (normalizeMembers().changed) saveData()
     log.info('Data loaded from file')
     return
   }
@@ -232,32 +232,42 @@ function getNextMemberCode(): string {
   return String(maxCode + 1)
 }
 
-// Deja cada tarjeta NFC normalizada y vinculada a un solo miembro (conserva la primera)
-function ensureUniqueNfcTags(): boolean {
+// Reglas para vincular una tarjeta: formato válido, no vinculada a otro miembro y distinta de cualquier
+// código de miembro (el check-in busca primero por código, así que una coincidencia entraría con otra persona).
+// Devuelve el motivo del rechazo, o null si la tarjeta se puede usar.
+function getNfcTagProblem(tag: string, memberId: string | null): string | null {
+  if (!NFC_TAG_PATTERN.test(tag)) return 'no es un número de tarjeta NFC válido'
+  const owner = data.members.find(m => m.nfcTag === tag && m.id !== memberId)
+  if (owner) return `ya está vinculada a ${owner.name}`
+  if (data.members.some(m => m.code === tag)) return 'coincide con el código de un miembro'
+  return null
+}
+
+// Deja cada tarjeta NFC normalizada, válida y vinculada a un solo miembro (conserva la primera).
+// Devuelve los nombres de los miembros a los que se les quitó la tarjeta.
+function ensureUniqueNfcTags(): string[] {
   const usedTags = new Set<string>()
-  let changed = false
+  const codes = new Set(data.members.map(m => m.code))
+  const removed: string[] = []
   for (const member of data.members) {
     if (member.nfcTag === undefined) continue
     const tag = typeof member.nfcTag === 'string' ? normalizeNfcTag(member.nfcTag) : ''
-    if (NFC_TAG_PATTERN.test(tag) && !usedTags.has(tag)) {
-      if (tag !== member.nfcTag) {
-        member.nfcTag = tag
-        changed = true
-      }
+    if (NFC_TAG_PATTERN.test(tag) && !usedTags.has(tag) && !codes.has(tag)) {
+      member.nfcTag = tag
       usedTags.add(tag)
     } else {
       delete member.nfcTag
-      changed = true
+      removed.push(member.name)
     }
   }
-  return changed
+  return removed
 }
 
 // Revisión de los miembros tras cargar o importar datos: códigos y tarjetas válidos y sin repetir
-function normalizeMembers(): boolean {
+function normalizeMembers(): { changed: boolean; removedTags: string[] } {
   const codesChanged = ensureMemberCodes()
-  const tagsChanged = ensureUniqueNfcTags()
-  return codesChanged || tagsChanged
+  const removedTags = ensureUniqueNfcTags()
+  return { changed: codesChanged || removedTags.length > 0, removedTags }
 }
 
 // Asigna código a los miembros que no lo tienen o lo tienen inválido/repetido (conserva el primero)
@@ -533,7 +543,6 @@ function getReceptionState(): ReceptionState {
     .map(member => ({
       id: member.id,
       code: member.code,
-      nfcTag: member.nfcTag ?? '',
       // Datos importados pueden traer campos vacíos; no deben romper la Recepción
       name: member.name ?? '',
       phone: member.phone ?? '',
@@ -620,14 +629,8 @@ app.whenReady().then(() => {
     if (!member) return { ok: false, error: 'El miembro ya no existe.' }
 
     const tag = normalizeNfcTag(rawTag)
-    if (!NFC_TAG_PATTERN.test(tag)) {
-      return { ok: false, error: 'La lectura no parece el número de una tarjeta NFC. Acerca la tarjeta de nuevo.' }
-    }
-    const owner = data.members.find(m => m.nfcTag === tag && m.id !== member.id)
-    if (owner) return { ok: false, error: `Esa tarjeta ya está vinculada a ${owner.name}.` }
-    if (data.members.some(m => m.code === tag)) {
-      return { ok: false, error: 'Ese número coincide con el código de un miembro; usa otra tarjeta.' }
-    }
+    const problem = getNfcTagProblem(tag, member.id)
+    if (problem) return { ok: false, error: `Esa tarjeta ${problem}. Acerca otra tarjeta o inténtalo de nuevo.` }
 
     member.nfcTag = tag
     saveData()
@@ -822,9 +825,12 @@ app.whenReady().then(() => {
     data.entries = merge(data.entries, importedData.entries)
     data.membershipSales = merge(data.membershipSales, importedData.membershipSales)
     data.attendances = merge(data.attendances, importedData.attendances)
-    normalizeMembers()
-    if (added > 0) saveData()
-    return { data, added, skipped }
+    const { removedTags } = normalizeMembers()
+    const warnings = removedTags.map(name =>
+      `La tarjeta NFC de ${name} ya estaba vinculada a otro miembro o no era válida; se quitó y hay que vincularla de nuevo.`
+    )
+    if (added > 0 || removedTags.length > 0) saveData()
+    return { data, added, skipped, warnings }
   })
 
   ipcMain.handle('import-csv', (_event, csvData: { type: 'members' | 'products' | 'memberships', data: string }): ImportSummary => {
@@ -926,10 +932,9 @@ app.whenReady().then(() => {
         const nfcTag = normalizeNfcTag(rawTag)
         let validTag: string | null = null
         if (rawTag) {
-          if (!NFC_TAG_PATTERN.test(nfcTag)) {
-            warnings.push(`Fila ${rowNumber}: tarjeta NFC "${rawTag}" no válida; el miembro quedó sin tarjeta.`)
-          } else if (data.members.some(m => m.nfcTag === nfcTag)) {
-            warnings.push(`Fila ${rowNumber}: la tarjeta NFC "${rawTag}" ya está vinculada a otro miembro; el miembro quedó sin tarjeta.`)
+          const problem = getNfcTagProblem(nfcTag, null)
+          if (problem) {
+            warnings.push(`Fila ${rowNumber}: la tarjeta NFC "${rawTag}" ${problem}; el miembro quedó sin tarjeta.`)
           } else {
             validTag = nfcTag
           }
@@ -1008,6 +1013,14 @@ app.whenReady().then(() => {
 
   ipcMain.handle('reception-check-in', (_event, memberId: string): CheckInResult => {
     const member = data.members.find(m => m.id === memberId)
+    if (!member) return { status: 'not_found' }
+    return performCheckIn(member)
+  })
+
+  // Enter en Recepción (código escrito, credencial escaneada o tarjeta NFC): mismas reglas que el kiosco
+  ipcMain.handle('reception-check-in-code', (_event, code: string): CheckInResult => {
+    const member = findMemberByCode(code)
+    if (member === 'ambiguous') return { status: 'ambiguous' }
     if (!member) return { status: 'not_found' }
     return performCheckIn(member)
   })

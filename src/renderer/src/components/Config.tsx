@@ -70,14 +70,18 @@ export function Config({ data, updateData }: ConfigProps) {
 
       const summary = await window.api.importData(importedData)
       updateData(summary.data)
-      if (summary.added === 0) {
-        alert(summary.skipped > 0
+      let message = summary.added === 0
+        ? (summary.skipped > 0
           ? `No se agregó nada: los ${summary.skipped} registros del archivo ya existían.`
           : 'El archivo no contiene registros para importar.')
-      } else {
-        alert(`Importación completa: ${summary.added} registros agregados` +
-          (summary.skipped > 0 ? `, ${summary.skipped} omitidos por ya existir.` : '.'))
+        : `Importación completa: ${summary.added} registros agregados` +
+          (summary.skipped > 0 ? `, ${summary.skipped} omitidos por ya existir.` : '.')
+      const warnings = summary.warnings ?? []
+      if (warnings.length > 0) {
+        message += '\n\nRevise estos avisos:\n' + warnings.slice(0, MAX_WARNINGS_SHOWN).join('\n')
+        if (warnings.length > MAX_WARNINGS_SHOWN) message += `\n…y ${warnings.length - MAX_WARNINGS_SHOWN} avisos más.`
       }
+      alert(message)
     } catch (error) {
       alert('Error al importar datos. Verifique el formato del archivo.')
     } finally {

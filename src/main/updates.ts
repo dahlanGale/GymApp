@@ -53,6 +53,8 @@ export function setupAutoUpdates(targetWindow: () => BrowserWindow | null): void
   autoUpdater.autoInstallOnAppQuit = canInstallUpdates
 
   autoUpdater.on('update-available', info => {
+    // La revisión periódica vuelve a avisar de una versión que ya se descargó; no se repite la descarga
+    if (state.status === 'downloaded' && state.version === info.version) return
     setState(
       canInstallUpdates
         ? { status: 'downloading', version: info.version, percent: 0 }

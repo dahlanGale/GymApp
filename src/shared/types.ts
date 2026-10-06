@@ -108,8 +108,6 @@ export interface ImportSummary {
 export interface ReceptionMember {
   id: string
   code: string
-  // Vacío si no tiene tarjeta; sirve para que acercar la tarjeta en Recepción encuentre al miembro
-  nfcTag: string
   name: string
   phone: string
   membershipName: string
