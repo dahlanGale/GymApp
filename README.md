@@ -49,6 +49,12 @@ Las dos ventanas aplican las mismas reglas: no entran miembros congelados ni con
   - Encabezados en inglés o en español (`name`/`nombre`, `phone`/`teléfono`, `enddate`/`vencimiento`, `price`/`precio`…). Para miembros, la columna `nfc` o `tarjeta` vincula su tarjeta NFC.
   - Omite los registros que ya existen y muestra avisos de los valores que no pudo interpretar.
 
+### Contraseña
+- En **Configuración → Contraseña** se puede proteger la ventana principal. Con contraseña, GymPOS la pide al abrirse y al pulsar **Bloquear** en el menú lateral.
+- Mientras está bloqueada, la ventana principal no puede leer ni cambiar datos (el proceso main rechaza esas operaciones) y no se puede abrir la Recepción. El kiosco de Check-In y la Recepción que ya estén abiertos siguen funcionando.
+- La contraseña no se guarda: solo un hash `scrypt` con sal aleatoria en `gym-pos-security.json`, en la misma carpeta de datos. No viaja en los respaldos exportados y no se puede consultar ni recuperar.
+- **Si se olvida**: cierra GymPOS y borra `gym-pos-security.json` de la carpeta de datos; al abrirla de nuevo ya no pedirá contraseña.
+
 ### Almacenamiento de Datos
 - Los datos se guardan en `gym-pos-data.json`, dentro de la carpeta de datos de la app en el directorio del usuario (en Mac, dentro de `~/Library/Application Support/`; en Windows, dentro de `%APPDATA%`). La ruta exacta queda en el registro de la app al iniciar.
 - Cada guardado escribe primero un archivo temporal y luego lo reemplaza, para que un apagón no deje el archivo a medias. La versión anterior queda en `gym-pos-data.json.bak`.

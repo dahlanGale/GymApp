@@ -40,6 +40,7 @@ import {
   sameText
 } from './csv'
 import { setupAutoUpdates } from './updates'
+import { isLocked, loadSecurity, registerSecurityHandlers } from './security'
 import { normalizeNfcTag } from '../shared/text'
 
 log.initialize()
@@ -362,6 +363,8 @@ function notifyDataChanged(): void {
 function openFromMenu(kind: SecondaryWindow): void {
   const focused = BrowserWindow.getFocusedWindow()
   if (focused && focused === secondaryWindows.get('checkin')) return
+  // Con la app bloqueada no se puede abrir la Recepción (muestra la lista de miembros)
+  if (kind === 'reception' && isLocked()) return
   openSecondaryWindow(kind)
 }
 
@@ -582,6 +585,17 @@ function performCheckIn(member: Member): CheckInResult {
   return { status: 'success', memberName: member.name }
 }
 
+type IpcHandler = Parameters<typeof ipcMain.handle>[1]
+
+// Canales de la ventana principal: con la app bloqueada no responden, aunque se llamen desde DevTools.
+// El kiosco y la Recepción usan sus propios canales y siguen funcionando.
+function handleProtected(channel: string, handler: IpcHandler): void {
+  ipcMain.handle(channel, (event, ...args) => {
+    if (isLocked()) throw new Error('GymPOS está bloqueado')
+    return handler(event, ...args)
+  })
+}
+
 // Una sola instancia: dos procesos con su propia copia de los datos se sobrescribirían el archivo.
 // Si se vuelve a abrir la app, se muestra la ventana principal de la instancia que ya corre.
 const hasSingleInstanceLock = app.requestSingleInstanceLock()
@@ -598,11 +612,14 @@ app.whenReady().then(() => {
   if (!hasSingleInstanceLock) return
   electronApp.setAppUserModelId('com.gympos.app')
 
+  loadSecurity()
+  registerSecurityHandlers()
+
   loadData()
 
-  ipcMain.handle('get-data', () => data)
+  handleProtected('get-data', () => data)
 
-  ipcMain.handle('add-member', (_event, member: Omit<Member, 'id' | 'code' | 'createdAt'>) => {
+  handleProtected('add-member', (_event, member: Omit<Member, 'id' | 'code' | 'createdAt'>) => {
     const newMember: Member = {
       ...member,
       id: generateId(),
@@ -614,7 +631,7 @@ app.whenReady().then(() => {
     return newMember
   })
 
-  ipcMain.handle('update-member', (_event, id: string, updates: Partial<Member>) => {
+  handleProtected('update-member', (_event, id: string, updates: Partial<Member>) => {
     const index = data.members.findIndex(m => m.id === id)
     if (index !== -1) {
       const current = data.members[index]
@@ -624,7 +641,7 @@ app.whenReady().then(() => {
     }
   })
 
-  ipcMain.handle('link-nfc-tag', (_event, memberId: string, rawTag: string): LinkNfcResult => {
+  handleProtected('link-nfc-tag', (_event, memberId: string, rawTag: string): LinkNfcResult => {
     const member = data.members.find(m => m.id === memberId)
     if (!member) return { ok: false, error: 'El miembro ya no existe.' }
 
@@ -637,7 +654,7 @@ app.whenReady().then(() => {
     return { ok: true, member }
   })
 
-  ipcMain.handle('unlink-nfc-tag', (_event, memberId: string): void => {
+  handleProtected('unlink-nfc-tag', (_event, memberId: string): void => {
     const member = data.members.find(m => m.id === memberId)
     if (member?.nfcTag) {
       delete member.nfcTag
@@ -645,7 +662,7 @@ app.whenReady().then(() => {
     }
   })
 
-  ipcMain.handle('freeze-member', (_event, id: string): Member | null => {
+  handleProtected('freeze-member', (_event, id: string): Member | null => {
     const member = data.members.find(m => m.id === id)
     if (!member || member.status === 'frozen' || isMembershipExpired(member)) return null
     member.status = 'frozen'
@@ -654,7 +671,7 @@ app.whenReady().then(() => {
     return member
   })
 
-  ipcMain.handle('unfreeze-member', (_event, id: string): Member | null => {
+  handleProtected('unfreeze-member', (_event, id: string): Member | null => {
     const member = data.members.find(m => m.id === id)
     if (!member || member.status !== 'frozen') return null
 
@@ -673,12 +690,12 @@ app.whenReady().then(() => {
     return member
   })
 
-  ipcMain.handle('delete-member', (_event, id: string) => {
+  handleProtected('delete-member', (_event, id: string) => {
     data.members = data.members.filter(m => m.id !== id)
     saveData()
   })
 
-  ipcMain.handle('add-membership', (_event, membership: Omit<Membership, 'id'>) => {
+  handleProtected('add-membership', (_event, membership: Omit<Membership, 'id'>) => {
     const newMembership: Membership = {
       ...membership,
       id: generateId()
@@ -688,7 +705,7 @@ app.whenReady().then(() => {
     return newMembership
   })
 
-  ipcMain.handle('update-membership', (_event, id: string, updates: Partial<Membership>) => {
+  handleProtected('update-membership', (_event, id: string, updates: Partial<Membership>) => {
     const index = data.memberships.findIndex(m => m.id === id)
     if (index !== -1) {
       data.memberships[index] = { ...data.memberships[index], ...updates }
@@ -696,12 +713,12 @@ app.whenReady().then(() => {
     }
   })
 
-  ipcMain.handle('delete-membership', (_event, id: string) => {
+  handleProtected('delete-membership', (_event, id: string) => {
     data.memberships = data.memberships.filter(m => m.id !== id)
     saveData()
   })
 
-  ipcMain.handle('add-product', (_event, product: Omit<Product, 'id'>) => {
+  handleProtected('add-product', (_event, product: Omit<Product, 'id'>) => {
     const newProduct: Product = {
       ...product,
       id: generateId()
@@ -711,7 +728,7 @@ app.whenReady().then(() => {
     return newProduct
   })
 
-  ipcMain.handle('update-product', (_event, id: string, updates: Partial<Product>) => {
+  handleProtected('update-product', (_event, id: string, updates: Partial<Product>) => {
     const index = data.products.findIndex(p => p.id === id)
     if (index !== -1) {
       data.products[index] = { ...data.products[index], ...updates }
@@ -719,12 +736,12 @@ app.whenReady().then(() => {
     }
   })
 
-  ipcMain.handle('delete-product', (_event, id: string) => {
+  handleProtected('delete-product', (_event, id: string) => {
     data.products = data.products.filter(p => p.id !== id)
     saveData()
   })
 
-  ipcMain.handle('add-sale', (_event, sale: Omit<Sale, 'id'>): AddSaleResult => {
+  handleProtected('add-sale', (_event, sale: Omit<Sale, 'id'>): AddSaleResult => {
     if (!Array.isArray(sale.items) || sale.items.length === 0) {
       return { ok: false, error: 'La venta no tiene productos' }
     }
@@ -764,7 +781,7 @@ app.whenReady().then(() => {
     return { ok: true, sale: newSale }
   })
 
-  ipcMain.handle('add-entry', (_event, entry: Omit<Entry, 'id'>) => {
+  handleProtected('add-entry', (_event, entry: Omit<Entry, 'id'>) => {
     const newEntry: Entry = {
       ...entry,
       id: generateId()
@@ -780,7 +797,7 @@ app.whenReady().then(() => {
     return newEntry
   })
 
-  ipcMain.handle('add-membership-sale', (_event, sale: Omit<MembershipSale, 'id'>) => {
+  handleProtected('add-membership-sale', (_event, sale: Omit<MembershipSale, 'id'>) => {
     const newSale: MembershipSale = {
       ...sale,
       id: generateId()
@@ -801,12 +818,12 @@ app.whenReady().then(() => {
     return newSale
   })
 
-  ipcMain.handle('update-config', (_event, config: BusinessConfig) => {
+  handleProtected('update-config', (_event, config: BusinessConfig) => {
     data.config = config
     saveData()
   })
 
-  ipcMain.handle('import-data', (_event, importedData: Partial<AppData>): ImportSummary => {
+  handleProtected('import-data', (_event, importedData: Partial<AppData>): ImportSummary => {
     if (!isRecord(importedData)) return { data, added: 0, skipped: 0 }
 
     let added = 0
@@ -833,7 +850,7 @@ app.whenReady().then(() => {
     return { data, added, skipped, warnings }
   })
 
-  ipcMain.handle('import-csv', (_event, csvData: { type: 'members' | 'products' | 'memberships', data: string }): ImportSummary => {
+  handleProtected('import-csv', (_event, csvData: { type: 'members' | 'products' | 'memberships', data: string }): ImportSummary => {
     const { type } = csvData
     if (type !== 'members' && type !== 'products' && type !== 'memberships') {
       return { data, added: 0, skipped: 0, error: 'Tipo de importación no válido.' }
@@ -1025,7 +1042,7 @@ app.whenReady().then(() => {
     return performCheckIn(member)
   })
 
-  ipcMain.handle('open-window', (_event, kind: SecondaryWindow) => {
+  handleProtected('open-window', (_event, kind: SecondaryWindow) => {
     // El valor viene del renderer; solo se aceptan las ventanas conocidas
     if (Object.hasOwn(SECONDARY_WINDOW_OPTIONS, kind)) openSecondaryWindow(kind)
   })

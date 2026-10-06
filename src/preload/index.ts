@@ -13,6 +13,8 @@ import type {
   AddSaleResult,
   ImportSummary,
   LinkNfcResult,
+  SecurityResult,
+  SecurityStatus,
   SecondaryWindow,
   UpdateState
 } from '../shared/types'
@@ -51,6 +53,13 @@ const api = {
     ipcRenderer.invoke('import-csv', csvData),
   openWindow: (kind: SecondaryWindow): Promise<void> => ipcRenderer.invoke('open-window', kind),
   getAppVersion: (): Promise<string> => ipcRenderer.invoke('get-app-version'),
+  getSecurityStatus: (): Promise<SecurityStatus> => ipcRenderer.invoke('security-status'),
+  unlock: (password: string): Promise<boolean> => ipcRenderer.invoke('security-unlock', password),
+  lock: (): Promise<SecurityStatus> => ipcRenderer.invoke('security-lock'),
+  setPassword: (current: string, next: string): Promise<SecurityResult> =>
+    ipcRenderer.invoke('security-set-password', current, next),
+  removePassword: (current: string): Promise<SecurityResult> =>
+    ipcRenderer.invoke('security-remove-password', current),
   getUpdateState: (): Promise<UpdateState> => ipcRenderer.invoke('get-update-state'),
   installUpdate: (): Promise<void> => ipcRenderer.invoke('install-update'),
   openUpdateDownload: (): Promise<void> => ipcRenderer.invoke('open-update-download'),
