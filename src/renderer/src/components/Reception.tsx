@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ReceptionMember, ReceptionState } from '../types'
+import { CheckInResult, ReceptionMember, ReceptionState } from '../types'
 import { Badge, Button } from './UI'
 import { CHECK_IN_FEEDBACK_COLORS, CheckInFeedbackType, getFeedbackFromResult } from '../utils/checkInFeedback'
 import { MEMBER_STATUS_DISPLAY } from '../utils/memberStatus'
@@ -13,11 +13,10 @@ const FEEDBACK_DURATION_MS = 3000
 // Cada minuto se revisa si cambió el día, para no seguir mostrando las entradas de ayer
 const DAY_CHECK_INTERVAL_MS = 60 * 1000
 
-// Miembro cuyo código o tarjeta NFC coincide exactamente con lo escrito (o lo que escribió el lector)
-function findExactMatch(members: ReceptionMember[], search: string): ReceptionMember | undefined {
-  const code = normalizeText(search)
-  const tag = normalizeNfcTag(search)
-  return members.find(member => member.code.toLowerCase() === code || (member.nfcTag !== '' && member.nfcTag === tag))
+// Lo que escriben el lector NFC o el escáner: solo dígitos o hexadecimal, de 6 o más caracteres.
+// Nunca se toma como búsqueda por nombre, para no registrar a otra persona si la tarjeta no está vinculada.
+function looksLikeScan(value: string): boolean {
+  return /^[0-9A-F]{6,}$/.test(normalizeNfcTag(value))
 }
 
 export function Reception() {
@@ -83,25 +82,15 @@ export function Reception() {
     const query = normalizeText(search)
     if (!query) return state.members
     const digits = query.replace(/\D/g, '')
-    const tag = normalizeNfcTag(search)
     const matches = state.members.filter(member =>
       normalizeText(member.name).includes(query) ||
       member.code.toLowerCase().includes(query) ||
-      (member.nfcTag !== '' && member.nfcTag === tag) ||
       (digits.length > 0 && member.phone.replace(/\D/g, '').includes(digits))
     )
-    // Un código exacto o una tarjeta NFC (escaneada o acercada al lector) va primero
-    const exact = findExactMatch(matches, search)
+    // Un código exacto va primero
+    const exact = matches.find(member => member.code.toLowerCase() === query)
     return exact ? [exact, ...matches.filter(member => member !== exact)] : matches
   }, [state.members, search])
-
-  // Miembro que Enter registraría: el del código exacto, o el único resultado de la búsqueda
-  const enterTarget = useMemo(() => {
-    if (!normalizeText(search)) return null
-    const exact = findExactMatch(state.members, search)
-    if (exact) return exact
-    return filteredMembers.length === 1 ? filteredMembers[0] : null
-  }, [state.members, search, filteredMembers])
 
   const visibleMembers = filteredMembers.slice(0, MAX_VISIBLE_MEMBERS)
 
@@ -114,6 +103,31 @@ export function Reception() {
     }, FEEDBACK_DURATION_MS)
   }
 
+  const showResult = (result: CheckInResult) => {
+    const { type, message } = getFeedbackFromResult(result)
+    showFeedback(type, message)
+  }
+
+  // Enter: el proceso main busca igual que el kiosco (código, tarjeta NFC, credencial, teléfono o email).
+  // Si no encuentra a nadie y la búsqueda por nombre deja un solo miembro, se registra a ese.
+  const handleEnter = async (raw: string) => {
+    const scanned = looksLikeScan(raw)
+    const fallback = !scanned && filteredMembers.length === 1 ? filteredMembers[0] : null
+    // Una lectura se borra de inmediato, para que la siguiente tarjeta empiece con el campo vacío
+    if (scanned) setSearch(current => (current === raw ? '' : current))
+    try {
+      let result = await window.receptionApi.checkInByCode(raw)
+      if (result.status === 'not_found' && fallback) result = await window.receptionApi.checkIn(fallback.id)
+      showResult(result)
+      if (result.status === 'success') setSearch(current => (current === raw ? '' : current))
+    } catch (error: unknown) {
+      console.error('Error during reception check-in:', error)
+      showFeedback('error', 'Error al registrar entrada')
+    } finally {
+      searchRef.current?.focus()
+    }
+  }
+
   const handleCheckIn = async (member: ReceptionMember) => {
     if (pendingMemberId) return
     setPendingMemberId(member.id)
@@ -121,8 +135,7 @@ export function Reception() {
     try {
       // La lista se actualiza sola con el aviso data-changed que manda el proceso main al guardar
       const result = await window.receptionApi.checkIn(member.id)
-      const { type, message } = getFeedbackFromResult(result)
-      showFeedback(type, message)
+      showResult(result)
       // Solo se limpia si nadie escribió otra búsqueda mientras se registraba
       if (result.status === 'success') setSearch(current => (current === searchAtClick ? '' : current))
     } catch (error: unknown) {
@@ -135,10 +148,9 @@ export function Reception() {
   }
 
   const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    // Enter registra el código exacto o el único miembro que deja la búsqueda
-    if (e.key === 'Enter' && enterTarget) {
+    if (e.key === 'Enter') {
       e.preventDefault()
-      handleCheckIn(enterTarget)
+      if (search.trim()) handleEnter(search)
     } else if (e.key === 'Escape') {
       setSearch('')
     }

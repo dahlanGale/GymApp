@@ -37,9 +37,10 @@ export function Members({ data, updateData }: MembersProps) {
       cell: info => <span className="font-mono">{info.getValue() as string}</span>,
     },
     {
-      // El valor es el número de la tarjeta, así que acercar una tarjeta en el buscador encuentra al miembro
+      // El número de la tarjeta no se muestra ni entra en la búsqueda: coincidiría por pedazos con códigos y teléfonos
       id: 'nfcTag',
       accessorFn: member => member.nfcTag ?? '',
+      enableGlobalFilter: false,
       header: 'NFC',
       cell: info => {
         const tag = info.getValue() as string
@@ -223,7 +224,6 @@ export function Members({ data, updateData }: MembersProps) {
       <NfcTagModal
         member={nfcMember}
         onClose={() => setNfcMemberId(null)}
-        onChanged={async () => updateData(await window.api.getData())}
       />
 
       <MemberHistory

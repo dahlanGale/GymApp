@@ -10,6 +10,8 @@ export type {
   CheckInResult,
   ImportSummary,
   LinkNfcResult,
+  SecurityResult,
+  SecurityStatus,
   ReceptionMember,
   ReceptionState,
   SecondaryWindow,

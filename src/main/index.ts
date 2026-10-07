@@ -40,6 +40,7 @@ import {
   sameText
 } from './csv'
 import { setupAutoUpdates } from './updates'
+import { isLocked, loadSecurity, registerSecurityHandlers } from './security'
 import { normalizeNfcTag } from '../shared/text'
 
 log.initialize()
@@ -162,7 +163,7 @@ function loadData(): void {
   const loaded = readDataFile(dataPath)
   if (loaded) {
     data = loaded
-    if (normalizeMembers()) saveData()
+    if (normalizeMembers().changed) saveData()
     log.info('Data loaded from file')
     return
   }
@@ -232,32 +233,42 @@ function getNextMemberCode(): string {
   return String(maxCode + 1)
 }
 
-// Deja cada tarjeta NFC normalizada y vinculada a un solo miembro (conserva la primera)
-function ensureUniqueNfcTags(): boolean {
+// Reglas para vincular una tarjeta: formato válido, no vinculada a otro miembro y distinta de cualquier
+// código de miembro (el check-in busca primero por código, así que una coincidencia entraría con otra persona).
+// Devuelve el motivo del rechazo, o null si la tarjeta se puede usar.
+function getNfcTagProblem(tag: string, memberId: string | null): string | null {
+  if (!NFC_TAG_PATTERN.test(tag)) return 'no es un número de tarjeta NFC válido'
+  const owner = data.members.find(m => m.nfcTag === tag && m.id !== memberId)
+  if (owner) return `ya está vinculada a ${owner.name}`
+  if (data.members.some(m => m.code === tag)) return 'coincide con el código de un miembro'
+  return null
+}
+
+// Deja cada tarjeta NFC normalizada, válida y vinculada a un solo miembro (conserva la primera).
+// Devuelve los nombres de los miembros a los que se les quitó la tarjeta.
+function ensureUniqueNfcTags(): string[] {
   const usedTags = new Set<string>()
-  let changed = false
+  const codes = new Set(data.members.map(m => m.code))
+  const removed: string[] = []
   for (const member of data.members) {
     if (member.nfcTag === undefined) continue
     const tag = typeof member.nfcTag === 'string' ? normalizeNfcTag(member.nfcTag) : ''
-    if (NFC_TAG_PATTERN.test(tag) && !usedTags.has(tag)) {
-      if (tag !== member.nfcTag) {
-        member.nfcTag = tag
-        changed = true
-      }
+    if (NFC_TAG_PATTERN.test(tag) && !usedTags.has(tag) && !codes.has(tag)) {
+      member.nfcTag = tag
       usedTags.add(tag)
     } else {
       delete member.nfcTag
-      changed = true
+      removed.push(member.name)
     }
   }
-  return changed
+  return removed
 }
 
 // Revisión de los miembros tras cargar o importar datos: códigos y tarjetas válidos y sin repetir
-function normalizeMembers(): boolean {
+function normalizeMembers(): { changed: boolean; removedTags: string[] } {
   const codesChanged = ensureMemberCodes()
-  const tagsChanged = ensureUniqueNfcTags()
-  return codesChanged || tagsChanged
+  const removedTags = ensureUniqueNfcTags()
+  return { changed: codesChanged || removedTags.length > 0, removedTags }
 }
 
 // Asigna código a los miembros que no lo tienen o lo tienen inválido/repetido (conserva el primero)
@@ -352,6 +363,8 @@ function notifyDataChanged(): void {
 function openFromMenu(kind: SecondaryWindow): void {
   const focused = BrowserWindow.getFocusedWindow()
   if (focused && focused === secondaryWindows.get('checkin')) return
+  // Con la app bloqueada no se puede abrir la Recepción (muestra la lista de miembros)
+  if (kind === 'reception' && isLocked()) return
   openSecondaryWindow(kind)
 }
 
@@ -533,7 +546,6 @@ function getReceptionState(): ReceptionState {
     .map(member => ({
       id: member.id,
       code: member.code,
-      nfcTag: member.nfcTag ?? '',
       // Datos importados pueden traer campos vacíos; no deben romper la Recepción
       name: member.name ?? '',
       phone: member.phone ?? '',
@@ -573,6 +585,17 @@ function performCheckIn(member: Member): CheckInResult {
   return { status: 'success', memberName: member.name }
 }
 
+type IpcHandler = Parameters<typeof ipcMain.handle>[1]
+
+// Canales de la ventana principal: con la app bloqueada no responden, aunque se llamen desde DevTools.
+// El kiosco y la Recepción usan sus propios canales y siguen funcionando.
+function handleProtected(channel: string, handler: IpcHandler): void {
+  ipcMain.handle(channel, (event, ...args) => {
+    if (isLocked()) throw new Error('GymPOS está bloqueado')
+    return handler(event, ...args)
+  })
+}
+
 // Una sola instancia: dos procesos con su propia copia de los datos se sobrescribirían el archivo.
 // Si se vuelve a abrir la app, se muestra la ventana principal de la instancia que ya corre.
 const hasSingleInstanceLock = app.requestSingleInstanceLock()
@@ -589,11 +612,14 @@ app.whenReady().then(() => {
   if (!hasSingleInstanceLock) return
   electronApp.setAppUserModelId('com.gympos.app')
 
+  loadSecurity()
+  registerSecurityHandlers()
+
   loadData()
 
-  ipcMain.handle('get-data', () => data)
+  handleProtected('get-data', () => data)
 
-  ipcMain.handle('add-member', (_event, member: Omit<Member, 'id' | 'code' | 'createdAt'>) => {
+  handleProtected('add-member', (_event, member: Omit<Member, 'id' | 'code' | 'createdAt'>) => {
     const newMember: Member = {
       ...member,
       id: generateId(),
@@ -605,7 +631,7 @@ app.whenReady().then(() => {
     return newMember
   })
 
-  ipcMain.handle('update-member', (_event, id: string, updates: Partial<Member>) => {
+  handleProtected('update-member', (_event, id: string, updates: Partial<Member>) => {
     const index = data.members.findIndex(m => m.id === id)
     if (index !== -1) {
       const current = data.members[index]
@@ -615,26 +641,20 @@ app.whenReady().then(() => {
     }
   })
 
-  ipcMain.handle('link-nfc-tag', (_event, memberId: string, rawTag: string): LinkNfcResult => {
+  handleProtected('link-nfc-tag', (_event, memberId: string, rawTag: string): LinkNfcResult => {
     const member = data.members.find(m => m.id === memberId)
     if (!member) return { ok: false, error: 'El miembro ya no existe.' }
 
     const tag = normalizeNfcTag(rawTag)
-    if (!NFC_TAG_PATTERN.test(tag)) {
-      return { ok: false, error: 'La lectura no parece el número de una tarjeta NFC. Acerca la tarjeta de nuevo.' }
-    }
-    const owner = data.members.find(m => m.nfcTag === tag && m.id !== member.id)
-    if (owner) return { ok: false, error: `Esa tarjeta ya está vinculada a ${owner.name}.` }
-    if (data.members.some(m => m.code === tag)) {
-      return { ok: false, error: 'Ese número coincide con el código de un miembro; usa otra tarjeta.' }
-    }
+    const problem = getNfcTagProblem(tag, member.id)
+    if (problem) return { ok: false, error: `Esa tarjeta ${problem}. Acerca otra tarjeta o inténtalo de nuevo.` }
 
     member.nfcTag = tag
     saveData()
     return { ok: true, member }
   })
 
-  ipcMain.handle('unlink-nfc-tag', (_event, memberId: string): void => {
+  handleProtected('unlink-nfc-tag', (_event, memberId: string): void => {
     const member = data.members.find(m => m.id === memberId)
     if (member?.nfcTag) {
       delete member.nfcTag
@@ -642,7 +662,7 @@ app.whenReady().then(() => {
     }
   })
 
-  ipcMain.handle('freeze-member', (_event, id: string): Member | null => {
+  handleProtected('freeze-member', (_event, id: string): Member | null => {
     const member = data.members.find(m => m.id === id)
     if (!member || member.status === 'frozen' || isMembershipExpired(member)) return null
     member.status = 'frozen'
@@ -651,7 +671,7 @@ app.whenReady().then(() => {
     return member
   })
 
-  ipcMain.handle('unfreeze-member', (_event, id: string): Member | null => {
+  handleProtected('unfreeze-member', (_event, id: string): Member | null => {
     const member = data.members.find(m => m.id === id)
     if (!member || member.status !== 'frozen') return null
 
@@ -670,12 +690,12 @@ app.whenReady().then(() => {
     return member
   })
 
-  ipcMain.handle('delete-member', (_event, id: string) => {
+  handleProtected('delete-member', (_event, id: string) => {
     data.members = data.members.filter(m => m.id !== id)
     saveData()
   })
 
-  ipcMain.handle('add-membership', (_event, membership: Omit<Membership, 'id'>) => {
+  handleProtected('add-membership', (_event, membership: Omit<Membership, 'id'>) => {
     const newMembership: Membership = {
       ...membership,
       id: generateId()
@@ -685,7 +705,7 @@ app.whenReady().then(() => {
     return newMembership
   })
 
-  ipcMain.handle('update-membership', (_event, id: string, updates: Partial<Membership>) => {
+  handleProtected('update-membership', (_event, id: string, updates: Partial<Membership>) => {
     const index = data.memberships.findIndex(m => m.id === id)
     if (index !== -1) {
       data.memberships[index] = { ...data.memberships[index], ...updates }
@@ -693,12 +713,12 @@ app.whenReady().then(() => {
     }
   })
 
-  ipcMain.handle('delete-membership', (_event, id: string) => {
+  handleProtected('delete-membership', (_event, id: string) => {
     data.memberships = data.memberships.filter(m => m.id !== id)
     saveData()
   })
 
-  ipcMain.handle('add-product', (_event, product: Omit<Product, 'id'>) => {
+  handleProtected('add-product', (_event, product: Omit<Product, 'id'>) => {
     const newProduct: Product = {
       ...product,
       id: generateId()
@@ -708,7 +728,7 @@ app.whenReady().then(() => {
     return newProduct
   })
 
-  ipcMain.handle('update-product', (_event, id: string, updates: Partial<Product>) => {
+  handleProtected('update-product', (_event, id: string, updates: Partial<Product>) => {
     const index = data.products.findIndex(p => p.id === id)
     if (index !== -1) {
       data.products[index] = { ...data.products[index], ...updates }
@@ -716,12 +736,12 @@ app.whenReady().then(() => {
     }
   })
 
-  ipcMain.handle('delete-product', (_event, id: string) => {
+  handleProtected('delete-product', (_event, id: string) => {
     data.products = data.products.filter(p => p.id !== id)
     saveData()
   })
 
-  ipcMain.handle('add-sale', (_event, sale: Omit<Sale, 'id'>): AddSaleResult => {
+  handleProtected('add-sale', (_event, sale: Omit<Sale, 'id'>): AddSaleResult => {
     if (!Array.isArray(sale.items) || sale.items.length === 0) {
       return { ok: false, error: 'La venta no tiene productos' }
     }
@@ -761,7 +781,7 @@ app.whenReady().then(() => {
     return { ok: true, sale: newSale }
   })
 
-  ipcMain.handle('add-entry', (_event, entry: Omit<Entry, 'id'>) => {
+  handleProtected('add-entry', (_event, entry: Omit<Entry, 'id'>) => {
     const newEntry: Entry = {
       ...entry,
       id: generateId()
@@ -777,7 +797,7 @@ app.whenReady().then(() => {
     return newEntry
   })
 
-  ipcMain.handle('add-membership-sale', (_event, sale: Omit<MembershipSale, 'id'>) => {
+  handleProtected('add-membership-sale', (_event, sale: Omit<MembershipSale, 'id'>) => {
     const newSale: MembershipSale = {
       ...sale,
       id: generateId()
@@ -798,12 +818,12 @@ app.whenReady().then(() => {
     return newSale
   })
 
-  ipcMain.handle('update-config', (_event, config: BusinessConfig) => {
+  handleProtected('update-config', (_event, config: BusinessConfig) => {
     data.config = config
     saveData()
   })
 
-  ipcMain.handle('import-data', (_event, importedData: Partial<AppData>): ImportSummary => {
+  handleProtected('import-data', (_event, importedData: Partial<AppData>): ImportSummary => {
     if (!isRecord(importedData)) return { data, added: 0, skipped: 0 }
 
     let added = 0
@@ -822,12 +842,15 @@ app.whenReady().then(() => {
     data.entries = merge(data.entries, importedData.entries)
     data.membershipSales = merge(data.membershipSales, importedData.membershipSales)
     data.attendances = merge(data.attendances, importedData.attendances)
-    normalizeMembers()
-    if (added > 0) saveData()
-    return { data, added, skipped }
+    const { removedTags } = normalizeMembers()
+    const warnings = removedTags.map(name =>
+      `La tarjeta NFC de ${name} ya estaba vinculada a otro miembro o no era válida; se quitó y hay que vincularla de nuevo.`
+    )
+    if (added > 0 || removedTags.length > 0) saveData()
+    return { data, added, skipped, warnings }
   })
 
-  ipcMain.handle('import-csv', (_event, csvData: { type: 'members' | 'products' | 'memberships', data: string }): ImportSummary => {
+  handleProtected('import-csv', (_event, csvData: { type: 'members' | 'products' | 'memberships', data: string }): ImportSummary => {
     const { type } = csvData
     if (type !== 'members' && type !== 'products' && type !== 'memberships') {
       return { data, added: 0, skipped: 0, error: 'Tipo de importación no válido.' }
@@ -926,10 +949,9 @@ app.whenReady().then(() => {
         const nfcTag = normalizeNfcTag(rawTag)
         let validTag: string | null = null
         if (rawTag) {
-          if (!NFC_TAG_PATTERN.test(nfcTag)) {
-            warnings.push(`Fila ${rowNumber}: tarjeta NFC "${rawTag}" no válida; el miembro quedó sin tarjeta.`)
-          } else if (data.members.some(m => m.nfcTag === nfcTag)) {
-            warnings.push(`Fila ${rowNumber}: la tarjeta NFC "${rawTag}" ya está vinculada a otro miembro; el miembro quedó sin tarjeta.`)
+          const problem = getNfcTagProblem(nfcTag, null)
+          if (problem) {
+            warnings.push(`Fila ${rowNumber}: la tarjeta NFC "${rawTag}" ${problem}; el miembro quedó sin tarjeta.`)
           } else {
             validTag = nfcTag
           }
@@ -1012,7 +1034,15 @@ app.whenReady().then(() => {
     return performCheckIn(member)
   })
 
-  ipcMain.handle('open-window', (_event, kind: SecondaryWindow) => {
+  // Enter en Recepción (código escrito, credencial escaneada o tarjeta NFC): mismas reglas que el kiosco
+  ipcMain.handle('reception-check-in-code', (_event, code: string): CheckInResult => {
+    const member = findMemberByCode(code)
+    if (member === 'ambiguous') return { status: 'ambiguous' }
+    if (!member) return { status: 'not_found' }
+    return performCheckIn(member)
+  })
+
+  handleProtected('open-window', (_event, kind: SecondaryWindow) => {
     // El valor viene del renderer; solo se aceptan las ventanas conocidas
     if (Object.hasOwn(SECONDARY_WINDOW_OPTIONS, kind)) openSecondaryWindow(kind)
   })

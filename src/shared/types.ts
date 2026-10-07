@@ -108,8 +108,6 @@ export interface ImportSummary {
 export interface ReceptionMember {
   id: string
   code: string
-  // Vacío si no tiene tarjeta; sirve para que acercar la tarjeta en Recepción encuentre al miembro
-  nfcTag: string
   name: string
   phone: string
   membershipName: string
@@ -124,6 +122,14 @@ export interface ReceptionState {
 }
 
 export type SecondaryWindow = 'checkin' | 'reception'
+
+// Contraseña de la ventana principal (ver src/main/security.ts)
+export interface SecurityStatus {
+  hasPassword: boolean
+  locked: boolean
+}
+
+export type SecurityResult = { ok: true } | { ok: false; error: string }
 
 // Estado de las actualizaciones automáticas que ve la ventana principal.
 // En Windows se descargan e instalan solas; en macOS (sin firma de Apple) solo se avisa con un enlace de descarga.

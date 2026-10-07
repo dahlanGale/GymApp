@@ -1,11 +1,13 @@
 import { useState } from 'react'
 import { AppData, BusinessConfig, ImportSummary } from '../types'
 import { Button, Card, Input } from './UI'
+import { SecuritySettings } from './SecuritySettings'
 import { toLocalDateString } from '../utils/dates'
 
 interface ConfigProps {
   data: AppData
   updateData: (d: AppData) => void
+  onSecurityChanged: (hasPassword: boolean) => void
 }
 
 const MAX_WARNINGS_SHOWN = 8
@@ -35,7 +37,7 @@ function formatCsvImportSummary(summary: ImportSummary, importType: 'members' | 
   return lines.join('\n')
 }
 
-export function Config({ data, updateData }: ConfigProps) {
+export function Config({ data, updateData, onSecurityChanged }: ConfigProps) {
   const [form, setForm] = useState<BusinessConfig>(data.config)
   const [importing, setImporting] = useState(false)
   const [importType, setImportType] = useState<'members' | 'products' | 'memberships'>('members')
@@ -70,14 +72,18 @@ export function Config({ data, updateData }: ConfigProps) {
 
       const summary = await window.api.importData(importedData)
       updateData(summary.data)
-      if (summary.added === 0) {
-        alert(summary.skipped > 0
+      let message = summary.added === 0
+        ? (summary.skipped > 0
           ? `No se agregó nada: los ${summary.skipped} registros del archivo ya existían.`
           : 'El archivo no contiene registros para importar.')
-      } else {
-        alert(`Importación completa: ${summary.added} registros agregados` +
-          (summary.skipped > 0 ? `, ${summary.skipped} omitidos por ya existir.` : '.'))
+        : `Importación completa: ${summary.added} registros agregados` +
+          (summary.skipped > 0 ? `, ${summary.skipped} omitidos por ya existir.` : '.')
+      const warnings = summary.warnings ?? []
+      if (warnings.length > 0) {
+        message += '\n\nRevise estos avisos:\n' + warnings.slice(0, MAX_WARNINGS_SHOWN).join('\n')
+        if (warnings.length > MAX_WARNINGS_SHOWN) message += `\n…y ${warnings.length - MAX_WARNINGS_SHOWN} avisos más.`
       }
+      alert(message)
     } catch (error) {
       alert('Error al importar datos. Verifique el formato del archivo.')
     } finally {
@@ -112,6 +118,7 @@ export function Config({ data, updateData }: ConfigProps) {
       </header>
       <div className="p-6">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <SecuritySettings onChanged={onSecurityChanged} />
           <Card>
             <h3 className="text-lg font-medium text-gray-800 mb-4">Datos del Negocio</h3>
             <div className="space-y-4">
