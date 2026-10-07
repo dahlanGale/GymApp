@@ -5,10 +5,12 @@ import { UpdateBanner } from './UpdateBanner'
 interface LayoutProps {
   page: Page
   setPage: (page: Page) => void
+  // Solo se muestra el botón Bloquear si hay contraseña
+  onLock?: () => void
   children: React.ReactNode
 }
 
-export function Layout({ page, setPage, children }: LayoutProps) {
+export function Layout({ page, setPage, onLock, children }: LayoutProps) {
   const [version, setVersion] = useState('')
 
   useEffect(() => {
@@ -111,6 +113,14 @@ export function Layout({ page, setPage, children }: LayoutProps) {
           >
             Abrir Check-In (kiosco)
           </button>
+          {onLock && (
+            <button
+              className="w-full px-3 py-2 text-sm text-left rounded bg-white/5 hover:bg-white/10 transition-colors cursor-pointer"
+              onClick={onLock}
+            >
+              🔒 Bloquear
+            </button>
+          )}
         </div>
         {version && <div className="px-4 pt-3 text-xs text-white/40">Versión {version}</div>}
       </aside>

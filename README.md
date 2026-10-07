@@ -18,7 +18,7 @@ GymPOS es una aplicación de escritorio completa diseñada para gimnasios que ne
 - Búsqueda por nombre, código, teléfono o email (sin importar acentos ni mayúsculas)
 - Estado calculado por la fecha de vencimiento: Activo, Expirado o Congelado
 - **Credencial** imprimible con código de barras (Code 39) que se puede escanear en el check-in
-- **Tarjeta NFC**: con el botón **NFC** se vincula una tarjeta al miembro acercándola al lector; desde ahí también se reemplaza o se desvincula. Cada tarjeta solo puede estar vinculada a un miembro.
+- **Tarjeta NFC**: con el botón **NFC** se vincula una tarjeta al miembro acercándola al lector; desde ahí también se reemplaza o se desvincula. Cada tarjeta solo puede estar vinculada a un miembro, y no puede ser igual al código de otro miembro.
 - **Historial** por miembro: asistencias, membresías compradas y compras de productos
 - **Congelar / Descongelar**: al descongelar, el vencimiento se recorre los días que estuvo congelado
 
@@ -48,6 +48,12 @@ Las dos ventanas aplican las mismas reglas: no entran miembros congelados ni con
   - Acepta archivos de Excel en español: separador `;` o `,`, números como `1.300,50` o `1,300.50`, fechas `AAAA-MM-DD` o `DD/MM/AAAA` y valores `VERDADERO`/`sí`.
   - Encabezados en inglés o en español (`name`/`nombre`, `phone`/`teléfono`, `enddate`/`vencimiento`, `price`/`precio`…). Para miembros, la columna `nfc` o `tarjeta` vincula su tarjeta NFC.
   - Omite los registros que ya existen y muestra avisos de los valores que no pudo interpretar.
+
+### Contraseña
+- En **Configuración → Contraseña** se puede proteger la ventana principal. Con contraseña, GymPOS la pide al abrirse y al pulsar **Bloquear** en el menú lateral.
+- Mientras está bloqueada, la ventana principal no puede leer ni cambiar datos (el proceso main rechaza esas operaciones) y no se puede abrir la Recepción. El kiosco de Check-In y la Recepción que ya estén abiertos siguen funcionando.
+- La contraseña no se guarda: solo un hash `scrypt` con sal aleatoria en `gym-pos-security.json`, en la misma carpeta de datos. No viaja en los respaldos exportados y no se puede consultar ni recuperar.
+- **Si se olvida**: cierra GymPOS y borra `gym-pos-security.json` de la carpeta de datos; al abrirla de nuevo ya no pedirá contraseña.
 
 ### Almacenamiento de Datos
 - Los datos se guardan en `gym-pos-data.json`, dentro de la carpeta de datos de la app en el directorio del usuario (en Mac, dentro de `~/Library/Application Support/`; en Windows, dentro de `%APPDATA%`). La ruta exacta queda en el registro de la app al iniciar.
