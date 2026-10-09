@@ -20,6 +20,12 @@ const attendanceColumns: ColumnDef<Attendance>[] = [
     header: 'Fecha y Hora',
     sortingFn: (a, b) => a.original.timestamp.localeCompare(b.original.timestamp),
   },
+  {
+    id: 'expiredOverride',
+    header: 'Nota',
+    enableGlobalFilter: false,
+    cell: info => info.row.original.expiredOverride ? <Badge variant="warning">Entró vencido</Badge> : null,
+  },
 ]
 
 const membershipColumns: ColumnDef<MembershipSale>[] = [

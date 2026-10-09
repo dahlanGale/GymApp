@@ -562,27 +562,31 @@ function getReceptionState(): ReceptionState {
   return { members, todayAttendances }
 }
 
-// Reglas comunes para el check-in del kiosco (por código) y de Recepción (por miembro)
-function performCheckIn(member: Member): CheckInResult {
-  if (member.status === 'frozen') return { status: 'frozen', memberName: member.name }
-  if (isMembershipExpired(member)) return { status: 'expired', memberName: member.name }
+// Reglas comunes para el check-in del kiosco (por código) y de Recepción (por miembro).
+// allowExpired solo lo usa Recepción, cuando el personal deja pasar a alguien con la membresía vencida.
+function performCheckIn(member: Member, allowExpired = false): CheckInResult {
+  const memberResult = { memberId: member.id, memberName: member.name }
+  if (member.status === 'frozen') return { status: 'frozen', ...memberResult }
+  const expired = isMembershipExpired(member)
+  if (expired && !allowExpired) return { status: 'expired', ...memberResult }
 
   const now = Date.now()
   const hasRecentCheckIn = data.attendances.some(
     a => a.memberId === member.id && now - new Date(a.timestamp).getTime() < DUPLICATE_CHECK_IN_WINDOW_MS
   )
-  if (hasRecentCheckIn) return { status: 'duplicate', memberName: member.name }
+  if (hasRecentCheckIn) return { status: 'duplicate', ...memberResult }
 
   const attendance: Attendance = {
     id: generateId(),
     memberId: member.id,
     memberName: member.name,
-    timestamp: new Date(now).toISOString()
+    timestamp: new Date(now).toISOString(),
+    ...(expired ? { expiredOverride: true } : {})
   }
 
   data.attendances.push(attendance)
   saveData()
-  return { status: 'success', memberName: member.name }
+  return { status: 'success', ...memberResult }
 }
 
 type IpcHandler = Parameters<typeof ipcMain.handle>[1]
@@ -1040,6 +1044,13 @@ app.whenReady().then(() => {
     if (member === 'ambiguous') return { status: 'ambiguous' }
     if (!member) return { status: 'not_found' }
     return performCheckIn(member)
+  })
+
+  // Recepción deja pasar a un miembro con la membresía vencida; la entrada queda marcada
+  ipcMain.handle('reception-check-in-override', (_event, memberId: string): CheckInResult => {
+    const member = data.members.find(m => m.id === memberId)
+    if (!member) return { status: 'not_found' }
+    return performCheckIn(member, true)
   })
 
   handleProtected('open-window', (_event, kind: SecondaryWindow) => {

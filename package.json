@@ -17,7 +17,8 @@
     "appId": "com.gympos.app",
     "productName": "GymPOS",
     "directories": {
-      "output": "release"
+      "output": "release",
+      "buildResources": "build"
     },
     "publish": [
       {
