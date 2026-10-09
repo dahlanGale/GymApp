@@ -27,6 +27,9 @@ export function Reception() {
   const [search, setSearch] = useState('')
   const [feedback, setFeedback] = useState<{ type: CheckInFeedbackType; message: string } | null>(null)
   const [pendingMemberId, setPendingMemberId] = useState<string | null>(null)
+  // Miembro con la membresía vencida que el personal puede dejar pasar. Se confirma con botones y no con
+  // confirm(), porque el Enter que manda el lector NFC aceptaría el diálogo solo
+  const [overridePrompt, setOverridePrompt] = useState<{ memberId: string; memberName: string } | null>(null)
   const searchRef = useRef<HTMLInputElement>(null)
   const feedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -104,9 +107,34 @@ export function Reception() {
   }
 
   const showResult = (result: CheckInResult) => {
+    if (result.status === 'expired') {
+      if (feedbackTimerRef.current) clearTimeout(feedbackTimerRef.current)
+      setFeedback(null)
+      setOverridePrompt({ memberId: result.memberId, memberName: result.memberName })
+      return
+    }
+    setOverridePrompt(null)
     const { type, message } = getFeedbackFromResult(result)
     showFeedback(type, message)
   }
+
+  const handleOverride = async () => {
+    if (!overridePrompt || pendingMemberId) return
+    const { memberId } = overridePrompt
+    setPendingMemberId(memberId)
+    try {
+      const result = await window.receptionApi.checkInOverride(memberId)
+      showResult(result)
+    } catch (error: unknown) {
+      console.error('Error during reception override check-in:', error)
+      showFeedback('error', 'Error al registrar entrada')
+    } finally {
+      setPendingMemberId(null)
+      searchRef.current?.focus()
+    }
+  }
+
+  const overrideMember = overridePrompt ? state.members.find(m => m.id === overridePrompt.memberId) : undefined
 
   // Enter: el proceso main busca igual que el kiosco (código, tarjeta NFC, credencial, teléfono o email).
   // Si no encuentra a nadie y la búsqueda por nombre deja un solo miembro, se registra a ese.
@@ -172,6 +200,22 @@ export function Reception() {
         </div>
       </header>
 
+      {overridePrompt && (
+        <div className="mx-4 mt-4 px-4 py-3 rounded-lg border-2 bg-yellow-100 border-yellow-500 text-yellow-900 flex items-center gap-4">
+          <div className="flex-1">
+            <div className="font-semibold">{overridePrompt.memberName} tiene la membresía vencida</div>
+            <div className="text-sm">
+              {overrideMember?.endDate ? `Venció el ${overrideMember.endDate}. ` : ''}
+              Puedes dejarlo pasar hoy; la entrada queda marcada como vencida en Asistencias.
+            </div>
+          </div>
+          <Button size="sm" variant="secondary" onClick={() => setOverridePrompt(null)}>Cancelar</Button>
+          <Button size="sm" variant="primary" disabled={pendingMemberId !== null} onClick={handleOverride}>
+            {pendingMemberId === overridePrompt.memberId ? 'Registrando…' : 'Dejar pasar'}
+          </Button>
+        </div>
+      )}
+
       {feedback && (
         <div className={`mx-4 mt-4 px-4 py-3 rounded-lg border-2 text-center font-semibold ${CHECK_IN_FEEDBACK_COLORS[feedback.type]}`}>
           {feedback.message}
@@ -215,7 +259,8 @@ export function Reception() {
                 {visibleMembers.map(member => {
                   const status = MEMBER_STATUS_DISPLAY[member.status]
                   const lastEntry = lastEntryByMember.get(member.id)
-                  const canCheckIn = member.status === 'active'
+                  // Con la membresía vencida el botón abre el aviso para dejarlo pasar; congelado no puede entrar
+                  const canCheckIn = member.status === 'active' || member.status === 'expired'
                   return (
                     <li key={member.id} className="flex items-center gap-4 px-4 py-3 border-b border-gray-100 hover:bg-gray-50">
                       <div className="flex-1 min-w-0">
@@ -272,6 +317,7 @@ export function Reception() {
                   >
                     <span className="font-mono text-sm text-gray-500">{formatTime(attendance.timestamp)}</span>
                     <span className="text-sm text-gray-900 truncate">{attendance.memberName}</span>
+                    {attendance.expiredOverride && <Badge variant="warning">Vencido</Badge>}
                   </li>
                 ))}
               </ul>

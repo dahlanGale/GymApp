@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { AppData, Attendance } from '../types'
-import { Table, StatCard, Card, Button, Input } from './UI'
+import { Table, StatCard, Card, Button, Input, Badge } from './UI'
 import { ColumnDef } from '@tanstack/react-table'
 import { toLocalDateString } from '../utils/dates'
 
@@ -25,6 +25,12 @@ export function Attendances({ data }: AttendancesProps) {
       cell: info => new Date(info.getValue() as string).toLocaleTimeString(),
     },
     { accessorKey: 'memberName', header: 'Miembro' },
+    {
+      id: 'expiredOverride',
+      header: 'Nota',
+      enableGlobalFilter: false,
+      cell: info => info.row.original.expiredOverride ? <Badge variant="warning">Entró vencido</Badge> : null,
+    },
   ]
 
   return (

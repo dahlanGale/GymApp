@@ -81,6 +81,8 @@ export interface Attendance {
   memberId: string
   memberName: string
   timestamp: string
+  // Entrada autorizada en Recepción aunque la membresía estaba vencida
+  expiredOverride?: boolean
 }
 
 export type LinkNfcResult =
@@ -142,7 +144,7 @@ export type UpdateState =
 export type CheckInResult =
   | { status: 'not_found' }
   | { status: 'ambiguous' }
-  | { status: 'success' | 'duplicate' | 'expired' | 'frozen'; memberName: string }
+  | { status: 'success' | 'duplicate' | 'expired' | 'frozen'; memberId: string; memberName: string }
 
 export interface BusinessConfig {
   gymName: string
