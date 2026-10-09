@@ -40,7 +40,7 @@ La app tiene dos ventanas que corren en paralelo al sistema y se abren desde el 
 
 **Lector NFC**: la app funciona con lectores USB que se comportan como teclado (los más comunes para control de acceso): al acercar la tarjeta escriben su número de serie y presionan Enter. No necesitan drivers en Windows ni en macOS. Basta con que el cursor esté en el campo del Check-In, de la Recepción o de la ventana de vincular tarjeta. Los lectores PC/SC, como el ACR122U, no escriben como teclado y no son compatibles por ahora.
 
-Las dos ventanas aplican las mismas reglas: no entran miembros congelados ni con la membresía vencida, y una entrada repetida dentro de 2 minutos no se vuelve a registrar. Todo lo que registran aparece al momento en la Recepción, en la página **Asistencias** y en el Dashboard.
+Las dos ventanas aplican las mismas reglas: no entran miembros congelados ni con la membresía vencida, y una entrada repetida dentro de 2 minutos no se vuelve a registrar. La única excepción es la Recepción: con un miembro vencido muestra un aviso con el botón **Dejar pasar**, y esa entrada queda marcada como "Entró vencido" en Asistencias y en el historial del miembro. Todo lo que registran aparece al momento en la Recepción, en la página **Asistencias** y en el Dashboard.
 
 ### Importar y Exportar (Configuración)
 - **Exportar** un respaldo completo en JSON e **importarlo** después: solo se agregan los registros que todavía no existen, así que importar el mismo respaldo dos veces no duplica nada.
@@ -181,6 +181,7 @@ npm run preview
 ```
 gymapp/
 ├── .github/workflows/ # CI (tipos y empaquetado en cada PR) y Release (publicar versiones)
+├── build/            # Ícono de la app (icon.svg es la fuente; icon.png, 1024×1024, lo usa electron-builder)
 ├── src/
 │   ├── main/          # Proceso principal de Electron (datos, ventanas, importación CSV)
 │   ├── preload/       # Preloads: ventana principal, kiosco de Check-In y Recepción
