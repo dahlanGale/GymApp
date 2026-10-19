@@ -9,5 +9,5 @@ export function normalizeText(value: string | null | undefined): string {
 // Los lectores NFC tipo teclado escriben el número de serie de la tarjeta en decimal o hexadecimal,
 // a veces con espacios o ':' entre bytes; se guarda siempre en mayúsculas y sin separadores
 export function normalizeNfcTag(value: string | null | undefined): string {
-  return (value ?? '').trim().toUpperCase().replace(/[\s:\-]/g, '')
+  return (value ?? '').trim().toUpperCase().replace(/[\s:-]/g, '')
 }

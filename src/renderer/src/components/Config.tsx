@@ -84,7 +84,7 @@ export function Config({ data, updateData, onSecurityChanged }: ConfigProps) {
         if (warnings.length > MAX_WARNINGS_SHOWN) message += `\n…y ${warnings.length - MAX_WARNINGS_SHOWN} avisos más.`
       }
       alert(message)
-    } catch (error) {
+    } catch {
       alert('Error al importar datos. Verifique el formato del archivo.')
     } finally {
       setImporting(false)
@@ -103,7 +103,7 @@ export function Config({ data, updateData, onSecurityChanged }: ConfigProps) {
       const summary = await window.api.importCsv({ type: importType, data: text })
       updateData(summary.data)
       alert(formatCsvImportSummary(summary, importType))
-    } catch (error) {
+    } catch {
       alert('Error al importar datos. Verifique el formato del archivo CSV.')
     } finally {
       setImporting(false)

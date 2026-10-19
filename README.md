@@ -191,6 +191,7 @@ gymapp/
 ├── release/           # Ejecutables generados
 ├── package.json       # Dependencias y scripts
 ├── electron.vite.config.ts  # Configuración de Vite
+├── eslint.config.mjs  # Reglas de ESLint
 ├── tsconfig.json      # Configuración de TypeScript
 ├── SPEC.md           # Especificación detallada del proyecto
 └── README.md         # Este archivo
@@ -223,6 +224,7 @@ gymapp/
 | `npm run build:mac` | Genera instaladores `.dmg` para macOS (Apple Silicon e Intel) |
 | `npm run preview` | Previsualiza la aplicación compilada |
 | `npm run typecheck` | Revisa los tipos de TypeScript (lo mismo que corre el CI) |
+| `npm run lint` | Revisa el código con ESLint, incluida la regla que prohíbe `any` (también corre en el CI) |
 
 ## Configuración
 

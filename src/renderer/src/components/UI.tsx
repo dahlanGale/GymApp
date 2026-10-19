@@ -5,7 +5,6 @@ import {
   getPaginationRowModel,
   getSortedRowModel,
   flexRender,
-  createColumnHelper,
   SortingState,
   ColumnDef,
   FilterFn,
@@ -24,7 +23,7 @@ function matchesSearch<T>(): FilterFn<T> {
 
 interface TableProps<T> {
   data: T[]
-  columns: ColumnDef<T, any>[]
+  columns: ColumnDef<T>[]
   searchPlaceholder?: string
 }
 

@@ -26,6 +26,9 @@ jobs:
       - name: Revisar tipos
         run: npm run typecheck
 
+      - name: Revisar código (ESLint)
+        run: npm run lint
+
   # Genera la app en Windows y macOS para asegurar que compila y se empaqueta en ambos sistemas.
   # Los instaladores quedan como artefactos descargables de la ejecución durante 7 días.
   package:
